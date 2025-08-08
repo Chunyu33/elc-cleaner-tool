@@ -37,8 +37,11 @@ module.exports = {
           config: './webpack.renderer.config.js',
           entryPoints: [
             {
-              html: './src/index.html',
-              js: './src/renderer.js',
+              // html: './src/index.html',
+              // js: './src/renderer.js',
+              // 改为react
+              html: './src/renderer/index.html',
+              js: './src/renderer/index.jsx', // react jsx
               name: 'main_window',
               preload: {
                 js: './src/preload.js',
