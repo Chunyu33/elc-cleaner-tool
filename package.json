@@ -1,8 +1,8 @@
 {
   "name": "elc-cleaner-tool",
-  "productName": "elc-cleaner-tool",
+  "productName": "CyCleaner",
   "version": "1.0.0",
-  "description": "My Electron application description",
+  "description": "一款简易的windows垃圾清理工具",
   "main": ".webpack/main",
   "scripts": {
     "start": "electron-forge start",
@@ -13,7 +13,7 @@
   },
   "keywords": [],
   "author": {
-    "name": "chunyu",
+    "name": "liuchunyu",
     "email": "1378813463@qq.com"
   },
   "license": "MIT",
@@ -38,6 +38,7 @@
     "style-loader": "^3.3.4"
   },
   "dependencies": {
+    "antd": "^5.26.7",
     "electron-squirrel-startup": "^1.0.1",
     "fs-extra": "^11.3.1",
     "os": "^0.1.2",

@@ -23,43 +23,47 @@ function appendSkipLog(line) {
   }
 }
 
-// Menu.setApplicationMenu(null); // 移除菜单
-const template = [
-  {
-    label: '文件',
-    submenu: [
-      {
-        label: '打开日志目录',
-        click: () => {
-          shell.openPath(path.join(app.getPath('userData'), 'logs'));
-        }
-      },
-      { type: 'separator' },
-      { role: 'quit', label: '退出' }
-    ]
-  },
-  {
-    label: '帮助',
-    submenu: [
-      {
-        label: '项目主页',
-        click: () => shell.openExternal('https://github.com/Chunyu33/elc-cleaner-tool')
-      },
-      {
-        label: 'B站主页',
-        click: () => shell.openExternal('https://space.bilibili.com/387797235')
-      }
-    ]
-  }
-];
-// 自定义顶部菜单
-const menu = Menu.buildFromTemplate(template);
-Menu.setApplicationMenu(menu);
+
+// const template = [
+//   {
+//     label: '文件',
+//     submenu: [
+//       {
+//         label: '打开日志目录',
+//         click: () => {
+//           shell.openPath(path.join(app.getPath('userData'), 'logs'));
+//         }
+//       },
+//       { type: 'separator' },
+//       { role: 'quit', label: '退出' }
+//     ]
+//   },
+//   {
+//     label: '帮助',
+//     submenu: [
+//       {
+//         label: '项目主页',
+//         click: () => shell.openExternal('https://github.com/Chunyu33/elc-cleaner-tool')
+//       },
+//       {
+//         label: 'B站主页',
+//         click: () => shell.openExternal('https://space.bilibili.com/387797235')
+//       }
+//     ]
+//   }
+// ];
+// // 自定义顶部菜单
+// const menu = Menu.buildFromTemplate(template);
+// Menu.setApplicationMenu(menu);
+
+Menu.setApplicationMenu(null); // 移除菜单
 
 const createWindow = () => {
   mainWindow = new BrowserWindow({
     width: 1000,
     height: 800,
+    frame: false, // 关闭系统标题栏
+    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : undefined, // Mac 优化
     webPreferences: {
       preload: MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY, // electron-forge webpack 注入
       icon: path.join(__dirname, 'assets/icon', 'favicon.ico')
@@ -71,6 +75,8 @@ const createWindow = () => {
 };
 
 app.whenReady().then(createWindow);
+
+// 事件监听
 app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) createWindow();
 });
@@ -144,4 +150,27 @@ ipcMain.handle('open-skip-log', async () => {
   } catch (e) {
     return false;
   }
+});
+
+// 窗口控制、以及其他事件
+ipcMain.on('window:minimize', () => {
+  mainWindow.minimize();
+});
+ipcMain.on('window:maximize', () => {
+  if (mainWindow.isMaximized()) {
+    mainWindow.unmaximize();
+  } else {
+    mainWindow.maximize();
+  }
+});
+ipcMain.on('window:close', () => {
+  mainWindow.close();
+});
+
+ipcMain.on('app-exit', () => {
+  app.quit();
+});
+
+ipcMain.on('open-link', (event, url) => {
+  shell.openExternal(url);
 });

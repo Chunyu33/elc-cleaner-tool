@@ -1,0 +1,85 @@
+button {
+  padding: 8px 12px;
+  border: none;
+  background: #4caf50;
+  color: #fff;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+button:disabled {
+  background: #bfbfbf;
+  cursor: not-allowed;
+}
+
+.container {
+  padding: 16px;
+  font-family: "Segoe UI, Roboto, Arial";
+}
+
+.operator {
+  display: flex;
+  gap: 10px;
+  align-items: content;
+  flex-wrap: wrap;
+  user-select: none;
+}
+
+.filter-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.pass {
+  max-height: 120px;
+  overflow: auto;
+  background-color: #fff;
+  padding: 8px;
+  border-radius: 6px;
+}
+.pass-none {
+  width: 100%;
+  text-align: center;
+  color: #666;
+}
+.pass-line {
+  color: #c0392b;
+  border-bottom: 1px dashed #f4d7d7;
+  padding: 6px;
+}
+
+.total-found{
+  margin-top: 10px;
+  color: #666;
+}
+
+.list-container {
+  margin-top: 12px;
+  border-radius: 6px;
+  overflow: hidden;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.06);
+  background-color: #fff;
+}
+
+.progress {
+  margin-top: 14px;
+  width: 100%;
+}
+.progress-ctx {
+  height: 28px;
+  background-color: #eee;
+  border-radius: 6px;
+  text-align: center;
+  overflow: hidden;
+}
+.progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg,#28a745,#19a974);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+}

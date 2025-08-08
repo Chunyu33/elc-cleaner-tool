@@ -53,4 +53,12 @@ contextBridge.exposeInMainWorld('api', {
   // 日志读取 / 打开
   readSkipLog: () => ipcRenderer.invoke('read-skip-log'),
   openSkipLog: () => ipcRenderer.invoke('open-skip-log'),
+
+  // 窗口大小化、关闭、退出事件
+  minimize: () => ipcRenderer.send('window:minimize'),
+  maximize: () => ipcRenderer.send('window:maximize'),
+  close: () => ipcRenderer.send('window:close'),
+  exitApp: () => ipcRenderer.send('app-exit'),
+  // 跳转到外链
+  openLink: (url) => ipcRenderer.send('open-link', url)
 });

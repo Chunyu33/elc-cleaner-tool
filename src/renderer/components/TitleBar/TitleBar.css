@@ -1,0 +1,54 @@
+.title-bar {
+  display: flex;
+  align-items: center;
+  height: 32px;
+  background: #222;
+  color: white;
+  -webkit-app-region: drag;
+  user-select: none;
+}
+
+.title-bar-left {
+  display: flex;
+  -webkit-app-region: no-drag;
+  margin-left: 5px;
+}
+
+.title-bar-center {
+  flex: 1;
+  text-align: center;
+}
+
+.title-bar-right {
+  display: flex;
+  -webkit-app-region: no-drag;
+}
+
+.title-bar .title-bar-right button {
+  width: 46px;
+  height: 100%;
+  background: transparent;
+  border: none;
+  color: white;
+  font-size: 14px;
+  cursor: pointer;
+  -webkit-app-region: no-drag; /* 按钮区域不能拖动 */
+}
+
+.title-bar .title-bar-right button:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.title-bar-right button {
+  background: transparent;
+  border: none;
+  color: white;
+  font-size: 14px;
+  cursor: pointer;
+  width: 36px;
+  height: 100%;
+}
+
+.ant-dropdown-menu {
+  -webkit-app-region: no-drag; /* 防止菜单点击被拖拽影响 */
+}
