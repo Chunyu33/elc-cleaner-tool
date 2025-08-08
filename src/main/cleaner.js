@@ -1,4 +1,6 @@
-const fs = require('fs').promises;
+// main/cleaner.js
+const fsp = require('fs').promises;
+const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
@@ -10,88 +12,118 @@ const junkPaths = [
 ];
 
 function formatSize(bytes) {
+  if (!bytes || bytes <= 0) return '0 B';
   if (bytes >= 1073741824) return (bytes / 1073741824).toFixed(2) + ' GB';
   if (bytes >= 1048576) return (bytes / 1048576).toFixed(2) + ' MB';
   if (bytes >= 1024) return (bytes / 1024).toFixed(2) + ' KB';
   return bytes + ' B';
 }
 
-// 异步递归计算目录大小
-async function getFolderSize(folderPath) {
-  let total = 0;
+// safeRemove: 优先使用 fsp.rm (Node >= 14.14)，否则回退到递归删除
+async function safeRemove(targetPath) {
+  if (!targetPath || targetPath.length < 3) return;
   try {
-    const files = await fs.readdir(folderPath, { withFileTypes: true });
-    for (const file of files) {
-      const filePath = path.join(folderPath, file.name);
-      try {
-        const stat = await fs.stat(filePath);
-        if (stat.isDirectory()) {
-          total += await getFolderSize(filePath);
-        } else {
-          total += stat.size;
-        }
-      } catch {
-        // 忽略子项错误
-      }
-    }
-  } catch {
-    // 忽略目录读取失败
-  }
-  return total;
-}
-
-// 更稳妥的删除目录内容方式（保留根目录）
-async function deleteFolderContents(folderPath, progressCallback, deletedCountObj) {
-  try {
-    const files = await fs.readdir(folderPath, { withFileTypes: true });
-    for (const file of files) {
-      const fullPath = path.join(folderPath, file.name);
-
-      try {
-        await fs.rm(fullPath, { recursive: true, force: true });
-        deletedCountObj.count++;
-        if (progressCallback) progressCallback(deletedCountObj.count, fullPath);
-      } catch (err) {
-        if (!['EACCES', 'EPERM', 'EBUSY', 'ENOENT'].includes(err.code)) {
-          console.error(`删除 ${fullPath} 失败:`, err);
-        }
-        // 常见错误跳过
-      }
+    if (typeof fsp.rm === 'function') {
+      await fsp.rm(targetPath, { recursive: true, force: true });
+      return;
     }
   } catch (err) {
-    console.error(`读取目录 ${folderPath} 失败:`, err);
+    // 如果 rm 存在但失败，继续回退机制
+  }
+
+  // 退回：手动递归删除
+  const stat = await fsp.stat(targetPath).catch(() => null);
+  if (!stat) return;
+  if (stat.isDirectory()) {
+    const entries = await fsp.readdir(targetPath).catch(() => []);
+    for (const e of entries) {
+      await safeRemove(path.join(targetPath, e));
+    }
+    await fsp.rmdir(targetPath).catch(() => {});
+  } else {
+    await fsp.unlink(targetPath).catch(() => {});
   }
 }
 
-// 扫描所有垃圾路径大小，异步返回数组
-async function scanJunkFiles() {
-  const results = [];
-  for (const p of junkPaths) {
-    const size = await getFolderSize(p);
-    results.push({ path: p, size });
+// scanFolder：递归扫描目录，遇到文件回调 onFound
+async function scanFolder(folderPath, onFound) {
+  let entries;
+  try {
+    entries = await fsp.readdir(folderPath, { withFileTypes: true });
+  } catch {
+    // 无权限或目录不存在，忽略
+    return;
   }
-  return results;
+
+  for (const entry of entries) {
+    const full = path.join(folderPath, entry.name);
+
+    // 使用 lstat 跳过符号链接
+    const lst = await fsp.lstat(full).catch(() => null);
+    if (!lst) continue;
+    if (lst.isSymbolicLink()) continue;
+
+    if (lst.isDirectory()) {
+      await scanFolder(full, onFound);
+    } else if (lst.isFile()) {
+      onFound && onFound({ path: full, size: lst.size, sizeStr: formatSize(lst.size) });
+    }
+  }
 }
 
-// 删除所有垃圾目录内容，支持进度回调
-async function deleteJunkFiles(progressCallback) {
-  console.warn('--------删除=====0')
-  const deletedCountObj = { count: 0 };
+// 对外：scanJunkFiles(onFound)
+// onFound 每个文件会回调一个对象 {path,size,sizeStr}
+async function scanJunkFiles(onFound) {
   for (const p of junkPaths) {
+    await scanFolder(p, onFound);
+  }
+}
+
+// 删除 selectedPaths 数组里的每一项；
+// onProgress(count, path) 每处理一项回调（无论成功或跳过）
+// onSkip(path, reason) 遇到跳过时调用
+async function deleteSelectedPaths(selectedPaths = [], onProgress, onSkip) {
+  let count = 0;
+  for (const p of selectedPaths) {
     try {
-      const exists = await fs.stat(p).then(() => true).catch(() => false);
-      console.warn('--------删除=====1')
-      if (exists) {
-        await deleteFolderContents(p, progressCallback, deletedCountObj);
-        console.warn('--------删除=====')
+      const st = await fsp.stat(p).catch(() => null);
+      if (!st) {
+        // 文件不存在，视为已处理
+        count++;
+        onProgress && onProgress(count, p);
+        continue;
+      }
+
+      if (st.isDirectory()) {
+        try {
+          await safeRemove(p);
+        } catch (err) {
+          const code = err && err.code;
+          const reason = code || (err && err.message) || 'unknown';
+          onSkip && onSkip(p, reason);
+        }
+      } else {
+        try {
+          await fsp.unlink(p);
+        } catch (err) {
+          const code = err && err.code;
+          const reason = code || (err && err.message) || 'unknown';
+          onSkip && onSkip(p, reason);
+        }
       }
     } catch (err) {
-      console.error(`处理目录 ${p} 出错:`, err);
+      // 记录并跳过
+      const code = err && err.code;
+      const reason = code || (err && err.message) || 'unknown';
+      onSkip && onSkip(p, reason);
+    } finally {
+      count++;
+      onProgress && onProgress(count, p);
     }
   }
 }
 
 module.exports = {
   scanJunkFiles,
-  deleteJunkFiles,
+  deleteSelectedPaths,
 };

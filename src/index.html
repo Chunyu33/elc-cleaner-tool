@@ -1,24 +1,36 @@
 <!doctype html>
 <html>
   <head>
-    <meta charset="UTF-8" />
+    <meta charset="utf-8" />
     <title>垃圾清理工具</title>
+    <!-- <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';" /> -->
     <!-- <link rel="stylesheet" href="./index.css" /> -->
   </head>
   <body>
-    <button id="scan">扫描垃圾</button>
-    <button id="clean" disabled>清理垃圾</button>
+    <header>
+      <div class="controls">
+        <button id="scan">扫描垃圾</button>
+        <button id="clean" disabled>清理垃圾</button>
+        <button id="selectAll">全选</button>
+      </div>
+      <div id="stats" class="stats"></div>
+    </header>
 
-    <ul id="result"></ul>
+    <main>
+      <section>
+        <ul id="result" class="result-list"></ul>
+      </section>
 
-    <div
-      class="progress-container"
-      id="progressContainer"
-      style="display: none"
-    >
-      <div class="progress-bar" id="progressBar">0%</div>
-    </div>
+      <section>
+        <h3>已跳过（被占用 / 无权限）</h3>
+        <div id="skipped" class="skipped-list"></div>
+      </section>
 
-    <script src="renderer.js"></script>
+      <div id="progressContainer" class="progress-container" style="display:none;">
+        <div id="progressBar" class="progress-bar">0%</div>
+      </div>
+    </main>
+
+    <script src="./renderer.js"></script>
   </body>
 </html>
