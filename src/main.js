@@ -23,7 +23,38 @@ function appendSkipLog(line) {
   }
 }
 
-Menu.setApplicationMenu(null); // 移除菜单
+// Menu.setApplicationMenu(null); // 移除菜单
+const template = [
+  {
+    label: '文件',
+    submenu: [
+      {
+        label: '打开日志目录',
+        click: () => {
+          shell.openPath(path.join(app.getPath('userData'), 'logs'));
+        }
+      },
+      { type: 'separator' },
+      { role: 'quit', label: '退出' }
+    ]
+  },
+  {
+    label: '帮助',
+    submenu: [
+      {
+        label: '项目主页',
+        click: () => shell.openExternal('https://github.com/Chunyu33/elc-cleaner-tool')
+      },
+      {
+        label: 'B站主页',
+        click: () => shell.openExternal('https://space.bilibili.com/387797235')
+      }
+    ]
+  }
+];
+// 自定义顶部菜单
+const menu = Menu.buildFromTemplate(template);
+Menu.setApplicationMenu(menu);
 
 const createWindow = () => {
   mainWindow = new BrowserWindow({
