@@ -1,0 +1,24 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>垃圾清理工具</title>
+    <!-- <link rel="stylesheet" href="./index.css" /> -->
+  </head>
+  <body>
+    <button id="scan">扫描垃圾</button>
+    <button id="clean" disabled>清理垃圾</button>
+
+    <ul id="result"></ul>
+
+    <div
+      class="progress-container"
+      id="progressContainer"
+      style="display: none"
+    >
+      <div class="progress-bar" id="progressBar">0%</div>
+    </div>
+
+    <script src="renderer.js"></script>
+  </body>
+</html>
