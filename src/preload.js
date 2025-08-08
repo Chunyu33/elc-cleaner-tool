@@ -1,12 +1,12 @@
-// preload.js
 const { contextBridge, ipcRenderer } = require('electron');
 
+// 将bridge挂载到window上
 contextBridge.exposeInMainWorld('api', {
-  // 控制：scan / delete
+  // 控制
   scanJunk: () => ipcRenderer.send('scan-junk'),
   deleteJunk: (files) => ipcRenderer.send('delete-junk', files),
 
-  // 订阅单条扫描项（返回 unsubscribe）
+  // 扫描项（逐条）
   onScanItem: (cb) => {
     const listener = (event, data) => cb && cb(data);
     ipcRenderer.on('scan-item', listener);
@@ -28,7 +28,7 @@ contextBridge.exposeInMainWorld('api', {
     return () => ipcRenderer.removeListener('scan-busy', listener);
   },
 
-  // 删除相关订阅
+  // 删除进度/跳过
   onDeleteProgress: (cb) => {
     const listener = (event, count, currentPath) => cb && cb(count, currentPath);
     ipcRenderer.on('delete-progress', listener);
@@ -49,4 +49,8 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.on('delete-busy', listener);
     return () => ipcRenderer.removeListener('delete-busy', listener);
   },
+
+  // 日志读取 / 打开
+  readSkipLog: () => ipcRenderer.invoke('read-skip-log'),
+  openSkipLog: () => ipcRenderer.invoke('open-skip-log'),
 });

@@ -1,7 +1,6 @@
-// renderer.js
 import './index.css';
 
-// DOM elements
+// DOM 元素
 const scanBtn = document.getElementById('scan');
 const cleanBtn = document.getElementById('clean');
 const selectAllBtn = document.getElementById('selectAll');
@@ -18,9 +17,8 @@ const progressBar = document.getElementById('progressBar');
 const stats = document.getElementById('stats');
 const skippedList = document.getElementById('skipped');
 
-//////////////////////////////////////////////////////////////////////////
-// Data structures
-let buffer = []; // incoming scanned items buffer
+// 数据
+let buffer = []; // 扫描缓存区
 let flushTimer = null;
 const FLUSH_INTERVAL_MS = 120;
 const IMMEDIATE_FLUSH_THRESHOLD = 200;
@@ -28,7 +26,7 @@ const IMMEDIATE_FLUSH_THRESHOLD = 200;
 let allItems = []; // { path,size,sizeStr,ext,selected,skipped,skipReason,groupKey }
 let extSet = new Set();
 
-let filteredFlat = []; // flattened display list (including group headers)
+let filteredFlat = []; // 扁平化显示列表（包括组标题）
 let groupMap = new Map(); // groupKey -> [indexes...]
 
 let selectedPaths = new Set();
@@ -36,13 +34,11 @@ let totalFound = 0;
 let initialDeleteTotal = 0;
 let deleteProcessed = 0;
 
-// Virtualization parameters
+// 虚拟列表参数
 const ROW_HEIGHT = 36; // px (group headers and items share same height)
 let viewportHeight = resultList.clientHeight || 420;
 let visibleCount = Math.ceil(viewportHeight / ROW_HEIGHT) + 6;
 
-//////////////////////////////////////////////////////////////////////////
-// Helpers
 function extOf(p) {
   const m = p.match(/\.([^.\\\/]+)$/);
   return m ? m[1].toLowerCase() : '';
@@ -65,12 +61,9 @@ function updateStats() {
   stats.textContent = `已发现: ${totalFound} 项；已选: ${selectedPaths.size} 项`;
 }
 
-//////////////////////////////////////////////////////////////////////////
-// Buffer flush -> integrate into allItems
 function flushBuffer() {
   if (buffer.length === 0) return;
   for (const item of buffer) {
-    // dedupe: if already exists, skip
     if (allItems.some(x => x.path === item.path)) continue;
     const ext = extOf(item.path);
     extSet.add(ext);
@@ -113,8 +106,7 @@ function stopFlushTimer() {
   }
 }
 
-//////////////////////////////////////////////////////////////////////////
-// Filters & Grouping
+// 过滤 & 分组
 function currentFileTypeFilter() {
   const v = fileTypeSelect.value;
   return v === '__all__' ? null : v;
@@ -153,10 +145,8 @@ function rebuildFileTypeOptions() {
 }
 
 function rebuildFlatList() {
-  // Apply filters, then grouping (create flattened array)
   const ft = currentFileTypeFilter();
   const sizeFilters = currentSizeFilters();
-  // filtered items indices
   const filtered = allItems.filter(it => {
     if (it.skipped) return true; // still show skipped items but deselected already
     if (ft && it.ext !== ft) return false;
@@ -164,7 +154,6 @@ function rebuildFlatList() {
     return true;
   });
 
-  // grouping
   const groupBy = currentGroupBy();
   const flat = [];
   if (groupBy === 'none') {
@@ -191,7 +180,6 @@ function rebuildFlatList() {
       if (!map.has(k)) map.set(k, []);
       map.get(k).push(it);
     }
-    // sort groups by name
     const keys = Array.from(map.keys()).sort();
     for (const k of keys) {
       flat.push({ type: 'group', label: k, count: map.get(k).length });
@@ -200,7 +188,7 @@ function rebuildFlatList() {
   }
 
   filteredFlat = flat;
-  // adjust inner height
+  // 调整内部高度
   updateInnerHeight();
 }
 
@@ -212,8 +200,7 @@ function updateInnerHeight() {
   renderVisible();
 }
 
-//////////////////////////////////////////////////////////////////////////
-// Virtual rendering
+// 虚拟列表
 function renderVisible() {
   const scrollTop = resultList.scrollTop;
   viewportHeight = resultList.clientHeight;
@@ -283,7 +270,7 @@ resultList.addEventListener('scroll', () => {
   renderVisible();
 });
 
-// Controls
+// 控件
 function updateControlsState() {
   cleanBtn.disabled = selectedPaths.size === 0;
   selectAllBtn.textContent = (selectedPaths.size === allItems.length && allItems.length>0) ? '取消全选' : '全选';
@@ -315,8 +302,7 @@ sizeFiltersDiv.addEventListener('change', () => {
   renderVisible();
 });
 
-//////////////////////////////////////////////////////////////////////////
-// Scan / delete handlers & subscriptions
+// 扫描/删除处理程序和订阅
 let unsubScanItem = null;
 let unsubScanComplete = null;
 let unsubScanError = null;
@@ -420,10 +406,8 @@ function startDeleteSubscriptions() {
   });
 }
 
-//////////////////////////////////////////////////////////////////////////
 // UI actions
 scanBtn.addEventListener('click', () => {
-  // reset
   buffer = [];
   stopFlushTimer();
   allItems = [];
@@ -464,7 +448,6 @@ cleanBtn.addEventListener('click', () => {
   window.api.deleteJunk(Array.from(selectedPaths));
 });
 
-// utility: initial size filters controls
 function createSizeFiltersUI() {
   const buckets = ['>=100 MB','10 - 100 MB','1 - 10 MB','< 1 MB'];
   sizeFiltersDiv.innerHTML = '';
@@ -482,14 +465,13 @@ function createSizeFiltersUI() {
 }
 createSizeFiltersUI();
 
-//////////////////////////////////////////////////////////////////////////
-// initial UI state
+// 初始化
 updateControlsState();
 updateStats();
 updateInnerHeight();
 renderVisible();
 
-// flush buffer on beforeunload
+// 在卸载之前刷新缓冲区
 window.addEventListener('beforeunload', () => {
   stopFlushTimer();
   if (typeof unsubScanItem === 'function') unsubScanItem();

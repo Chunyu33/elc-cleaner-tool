@@ -1,0 +1,424 @@
+import React, { useEffect, useRef, useState, useMemo } from 'react';
+import { FixedSizeList as List } from 'react-window';
+
+// 可调参数
+const ROW_HEIGHT = 36;
+const FLUSH_INTERVAL_MS = 120;
+const IMMEDIATE_FLUSH_THRESHOLD = 200;
+
+function extOf(p) {
+  const m = p.match(/\.([^.\\\/]+)$/);
+  return m ? m[1].toLowerCase() : '';
+}
+function sizeBucket(size) {
+  if (size >= 100 * 1024 * 1024) return '>=100 MB';
+  if (size >= 10 * 1024 * 1024) return '10 - 100 MB';
+  if (size >= 1 * 1024 * 1024) return '1 - 10 MB';
+  return '< 1 MB';
+}
+function parentFolderName(p) {
+  const s = p.replace(/\\/g, '/');
+  const parts = s.split('/');
+  return parts.length >= 2 ? parts[parts.length - 2] : '';
+}
+
+export default function App() {
+  // 主数据
+  const [items, setItems] = useState([]); // {path,size,sizeStr,ext,selected,skipped,skipReason,parent,sizeBucket}
+  const seen = useRef(new Set());
+  const extSet = useRef(new Set());
+  const bufferRef = useRef([]);
+  const [totalFound, setTotalFound] = useState(0);
+
+  // UI state
+  const [groupBy, setGroupBy] = useState('none'); // none | size | path
+  const [fileType, setFileType] = useState('__all__');
+  const [sizeFilters, setSizeFilters] = useState(new Set(['>=100 MB','10 - 100 MB','1 - 10 MB','< 1 MB']));
+
+  // delete / progress state
+  const [initialDeleteTotal, setInitialDeleteTotal] = useState(0);
+  const [deleteProcessed, setDeleteProcessed] = useState(0);
+  const [progressPct, setProgressPct] = useState(0);
+  const [deleting, setDeleting] = useState(false);
+
+  // 跳过的 UI
+  const [skippedList, setSkippedList] = useState([]);
+
+  // 刷新的定时器
+  const flushTimerRef = useRef(null);
+
+  // 选中的文件集合
+  const selectedPaths = useMemo(() => new Set(items.filter(it => it.selected).map(it => it.path)), [items]);
+
+  // 动态文件类型选项
+  const fileTypeOptions = useMemo(() => {
+    const arr = Array.from(extSet.current).filter(e => e).sort();
+    return ['__all__', ...arr];
+  }, [items.length]);
+
+  // 缓冲区刷新 function
+  const flushBuffer = () => {
+    if (bufferRef.current.length === 0) return;
+    const incoming = bufferRef.current.splice(0, bufferRef.current.length);
+    const newOnes = [];
+    for (const item of incoming) {
+      if (seen.current.has(item.path)) continue;
+      seen.current.add(item.path);
+      const ext = extOf(item.path);
+      extSet.current.add(ext);
+      newOnes.push({
+        path: item.path,
+        size: item.size,
+        sizeStr: item.sizeStr || '',
+        ext,
+        selected: true,
+        skipped: false,
+        skipReason: null,
+        parent: parentFolderName(item.path),
+        sizeBucket: sizeBucket(item.size),
+      });
+    }
+    if (newOnes.length > 0) {
+      setItems(prev => {
+        const merged = prev.concat(newOnes);
+        setTotalFound(merged.length);
+        return merged;
+      });
+    }
+  };
+
+  const ensureFlushTimer = () => {
+    if (flushTimerRef.current) return;
+    flushTimerRef.current = setInterval(() => {
+      if (bufferRef.current.length > 0) flushBuffer();
+    }, FLUSH_INTERVAL_MS);
+  };
+  const stopFlushTimer = () => {
+    if (flushTimerRef.current) {
+      clearInterval(flushTimerRef.current);
+      flushTimerRef.current = null;
+    }
+  };
+
+  // 订阅：扫描（onScanItem/onScanComplete）
+  useEffect(() => {
+    const unsubItem = window.api.onScanItem((item) => {
+      if (!item || !item.path) return;
+      bufferRef.current.push(item);
+      if (bufferRef.current.length >= IMMEDIATE_FLUSH_THRESHOLD) {
+        // immediate flush
+        const itemsNow = bufferRef.current.splice(0, bufferRef.current.length);
+        const newOnes = [];
+        for (const it of itemsNow) {
+          if (seen.current.has(it.path)) continue;
+          seen.current.add(it.path);
+          const ext = extOf(it.path);
+          extSet.current.add(ext);
+          newOnes.push({
+            path: it.path,
+            size: it.size,
+            sizeStr: it.sizeStr || '',
+            ext,
+            selected: true,
+            skipped: false,
+            skipReason: null,
+            parent: parentFolderName(it.path),
+            sizeBucket: sizeBucket(it.size),
+          });
+        }
+        if (newOnes.length > 0) {
+          setItems(prev => {
+            const merged = prev.concat(newOnes);
+            setTotalFound(merged.length);
+            return merged;
+          });
+        }
+      } else {
+        ensureFlushTimer();
+      }
+    });
+
+    const unsubComplete = window.api.onScanComplete(() => {
+      flushBuffer();
+      stopFlushTimer();
+    });
+
+    const unsubError = window.api.onScanError((err) => {
+      stopFlushTimer();
+      alert('扫描出错: ' + (err || 'unknown'));
+    });
+
+    const unsubBusy = window.api.onScanBusy(() => {
+      alert('扫描任务正在运行，请稍候');
+    });
+
+    return () => {
+      unsubItem && unsubItem();
+      unsubComplete && unsubComplete();
+      unsubError && unsubError();
+      unsubBusy && unsubBusy();
+      stopFlushTimer();
+    };
+  }, []);
+
+  // 订阅：删除进度/跳过/完成
+  useEffect(() => {
+    const unsubProgress = window.api.onDeleteProgress((count, currentPath) => {
+      // count 是从 main 中累积的；使用它来计算与 initialDeleteTotal 相关的百分比
+      setDeleteProcessed(count);
+      setProgressPct(initialDeleteTotal > 0 ? Math.min(100, Math.floor((count / initialDeleteTotal) * 100)) : 100);
+      // 如果存在，则删除已删除的项目
+      setItems(prev => {
+        const idx = prev.findIndex(it => it.path === currentPath);
+        if (idx >= 0) {
+          const copy = prev.slice();
+          copy.splice(idx, 1);
+          setTotalFound(copy.length);
+          return copy;
+        }
+        return prev;
+      });
+    });
+
+    const unsubSkip = window.api.onDeleteSkip((p, reason) => {
+      // 在项目中标记为已跳过并附加到 skippedList
+      setItems(prev => prev.map(it => it.path === p ? { ...it, skipped: true, skipReason: reason, selected: false } : it));
+      setSkippedList(prev => [...prev, { path: p, reason }]);
+    });
+
+    const unsubComplete = window.api.onDeleteComplete(() => {
+      setDeleting(false);
+      // 清除垃圾文件 进度条完成
+      setProgressPct(100);
+      setTimeout(() => setProgressPct(0), 900);
+    });
+
+    const unsubBusy = window.api.onDeleteBusy(() => {
+      alert('删除任务正在运行，请稍候。');
+    });
+
+    return () => {
+      unsubProgress && unsubProgress();
+      unsubSkip && unsubSkip();
+      unsubComplete && unsubComplete();
+      unsubBusy && unsubBusy();
+    };
+  }, [initialDeleteTotal]);
+
+  // 过滤器和分组：生成带有组标题的扁平列表
+  const filteredFlat = useMemo(() => {
+    const ft = fileType === '__all__' ? null : fileType;
+    const sizes = sizeFilters;
+
+    const filtered = items.filter(it => {
+      if (it.skipped) return true; // 保持跳过可见 但取消选择
+      if (ft && it.ext !== ft) return false;
+      if (sizes.size > 0 && !sizes.has(it.sizeBucket)) return false;
+      return true;
+    });
+
+    const flat = [];
+    if (groupBy === 'none') {
+      for (const it of filtered) flat.push({ type: 'file', item: it });
+    } else if (groupBy === 'size') {
+      const map = new Map();
+      for (const it of filtered) {
+        const k = it.sizeBucket;
+        if (!map.has(k)) map.set(k, []);
+        map.get(k).push(it);
+      }
+      const order = ['>=100 MB','10 - 100 MB','1 - 10 MB','< 1 MB'];
+      for (const k of order) {
+        if (!map.has(k)) continue;
+        flat.push({ type: 'group', label: k, count: map.get(k).length });
+        for (const it of map.get(k)) flat.push({ type: 'file', item: it });
+      }
+    } else if (groupBy === 'path') {
+      const map = new Map();
+      for (const it of filtered) {
+        const k = it.parent || '其他';
+        if (!map.has(k)) map.set(k, []);
+        map.get(k).push(it);
+      }
+      const keys = Array.from(map.keys()).sort();
+      for (const k of keys) {
+        flat.push({ type: 'group', label: k, count: map.get(k).length });
+        for (const it of map.get(k)) flat.push({ type: 'file', item: it });
+      }
+    }
+    return flat;
+  }, [items, groupBy, fileType, sizeFilters]);
+
+  // 虚拟列表的参数
+  const listHeight = 300;
+  const itemCount = filteredFlat.length;
+  const itemSize = ROW_HEIGHT;
+
+  // UI控件绑定的动作
+  const startScan = () => {
+    // 重置
+    bufferRef.current = [];
+    stopFlushTimer();
+    seen.current = new Set();
+    extSet.current = new Set();
+    setItems([]);
+    setSkippedList([]);
+    setTotalFound(0);
+    setProgressPct(0);
+    setInitialDeleteTotal(0);
+    setDeleteProcessed(0);
+    // 开始扫描
+    window.api.scanJunk();
+  };
+
+  const toggleSelectAll = () => {
+    const shouldSelectAll = items.some(it => !it.selected && !it.skipped);
+    setItems(prev => prev.map(it => it.skipped ? { ...it, selected: false } : { ...it, selected: shouldSelectAll }));
+  };
+
+  const toggleSizeFilter = (bucket) => {
+    setSizeFilters(prev => {
+      const next = new Set(prev);
+      if (next.has(bucket)) next.delete(bucket);
+      else next.add(bucket);
+      return next;
+    });
+  };
+
+  const startDelete = () => {
+    const toDelete = items.filter(it => it.selected).map(it => it.path);
+    if (toDelete.length === 0) {
+      alert('未选择任何要删除的项。');
+      return;
+    }
+    setInitialDeleteTotal(toDelete.length);
+    setDeleteProcessed(0);
+    setProgressPct(0);
+    setDeleting(true);
+    window.api.deleteJunk(toDelete);
+  };
+
+  // 打开日志所在文件夹
+  const openSkipLog = async () => {
+    const ok = await window.api.openSkipLog();
+    if (!ok) {
+      const content = await window.api.readSkipLog();
+      alert(content || '日志为空或无法读取');
+    }
+  };
+
+  // 用于 react-window 的行渲染器（行组件）
+  const Row = ({ index, style }) => {
+    const row = filteredFlat[index];
+    if (!row) return null;
+    if (row.type === 'group') {
+      return (
+        <div style={{ ...style, display: 'flex', alignItems: 'center', padding: '6px 12px', background: '#f4f6f8', fontWeight: 700 }}>
+          {row.label} ({row.count})
+        </div>
+      );
+    }
+    const it = row.item;
+    return (
+      <div style={{ ...style, display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', boxSizing: 'border-box' }}>
+        <input
+          type="checkbox"
+          checked={!!it.selected}
+          disabled={it.skipped}
+          onChange={() => {
+            setItems(prev => prev.map(x => x.path === it.path ? { ...x, selected: !x.selected } : x));
+          }}
+        />
+        <div style={{ fontSize: 12, flex: 1, wordBreak: 'break-all' }}>
+          {it.path}
+          {it.sizeStr ? <span style={{ color: '#666', marginLeft: 8 }}>{it.sizeStr}</span> : null}
+          {it.skipped && it.skipReason ? <span style={{ color: '#c0392b', marginLeft: 8 }}>跳过: {it.skipReason}</span> : null}
+        </div>
+      </div>
+    );
+  };
+
+  // 卸载时的清理工作
+  useEffect(() => {
+    return () => {
+      stopFlushTimer();
+    };
+  }, []);
+
+  return (
+    <div className="container">
+
+      <div className='operator'>
+        <button onClick={startScan}>扫描垃圾</button>
+        <button onClick={startDelete} disabled={deleting || selectedPaths.size === 0}>清理已选 ({selectedPaths.size})</button>
+        <button onClick={toggleSelectAll}>全选 / 取消全选</button>
+        <button onClick={openSkipLog}>打开跳过日志</button>
+
+        <div className='filter-row'>
+          <label>
+            分组:
+            <select value={groupBy} onChange={e => setGroupBy(e.target.value)} style={{ marginLeft: 6 }}>
+              <option value="none">无</option>
+              <option value="size">按大小</option>
+              <option value="path">按路径</option>
+            </select>
+          </label>
+
+          <label style={{ marginLeft: 8 }}>
+            文件类型:
+            <select value={fileType} onChange={e => setFileType(e.target.value)} style={{ marginLeft: 6 }}>
+              {fileTypeOptions.map(ft => <option key={ft} value={ft}>{ft === '__all__' ? '全部' : '.' + ft}</option>)}
+            </select>
+          </label>
+
+          <div style={{ marginLeft: 8 }}>
+            大小:
+            {['>=100 MB','10 - 100 MB','1 - 10 MB','< 1 MB'].map(b => (
+              <label key={b} style={{ marginLeft: 6 }}>
+                <input type="checkbox" checked={sizeFilters.has(b)} onChange={() => toggleSizeFilter(b)} /> {b}
+              </label>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className='total-found'>
+        已发现: {totalFound} 项；已选: {selectedPaths.size} 项
+      </div>
+
+      <div className='list-container'>
+        <div>
+          <List
+            height={listHeight}
+            itemCount={itemCount}
+            itemSize={itemSize}
+            width="100%"
+            style={{ overflowX: 'hidden' }}
+          >
+            {Row}
+          </List>
+        </div>
+      </div>
+
+      <div style={{ marginTop: 12 }}>
+        <h4>已跳过（系统占用/无权限等）{skippedList.length}&nbsp;项</h4>
+        <div className='pass'>
+          {skippedList.length === 0 ? <div className='pass-none'>暂无</div> : skippedList.map((s, idx) => (
+            <div key={idx} className='pass-line'>
+              {s.path} — {s.reason}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className='progress'>
+        <div className='progress-ctx'>
+          {progressPct > 0 ? <div className='progress-bar' style={{ width: `${progressPct}%` }}>
+            {progressPct}% {deleting ? '' : ''}
+          </div> : <div></div>}
+          
+        </div>
+      </div>
+    </div>
+  );
+}

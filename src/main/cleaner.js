@@ -1,14 +1,7 @@
-// main/cleaner.js
+// 扫描、删除垃圾文件核心
 const fsp = require('fs').promises;
+const fs = require('fs');
 const path = require('path');
-const os = require('os');
-
-const junkPaths = [
-  os.tmpdir(),
-  path.join(os.homedir(), 'AppData', 'Local', 'Temp'),
-  path.join(os.homedir(), 'AppData', 'Local', 'Microsoft', 'Windows', 'INetCache'),
-  path.join(os.homedir(), 'AppData', 'Local', 'Google', 'Chrome', 'User Data', 'Default', 'Cache'),
-];
 
 function formatSize(bytes) {
   if (!bytes || bytes <= 0) return '0 B';
@@ -18,7 +11,7 @@ function formatSize(bytes) {
   return bytes + ' B';
 }
 
-// safeRemove: 优先使用 fsp.rm (Node >= 14.14)，否则回退到递归删除
+// safeRemove: 优先使用 fsp.rm；若不可用退回到手动递归
 async function safeRemove(targetPath) {
   if (!targetPath || targetPath.length < 3) return;
   try {
@@ -27,8 +20,9 @@ async function safeRemove(targetPath) {
       return;
     }
   } catch (err) {
-    // 若 rm 存在但失败，回退到手动删除
+    // 如果 rm 存在但异常，继续回退
   }
+
   // 回退实现
   const stat = await fsp.stat(targetPath).catch(() => null);
   if (!stat) return;
@@ -43,21 +37,22 @@ async function safeRemove(targetPath) {
   }
 }
 
-// 递归扫描目录，遇到文件回调 onFound
+// 递归扫描目录，遇到文件回调 onFound({path,size,sizeStr})
 async function scanFolder(folderPath, onFound) {
   let entries;
   try {
     entries = await fsp.readdir(folderPath, { withFileTypes: true });
   } catch {
-    return; // 无权限或不存在，忽略
+    return;
   }
 
   for (const entry of entries) {
     const full = path.join(folderPath, entry.name);
     const lst = await fsp.lstat(full).catch(() => null);
     if (!lst) continue;
-    if (lst.isSymbolicLink()) continue;
+    if (lst.isSymbolicLink()) continue; // 跳过符号链接
     if (lst.isDirectory()) {
+      // 递归子目录
       await scanFolder(full, onFound);
     } else if (lst.isFile()) {
       onFound && onFound({ path: full, size: lst.size, sizeStr: formatSize(lst.size) });
@@ -65,14 +60,25 @@ async function scanFolder(folderPath, onFound) {
   }
 }
 
-// 导出：scanJunkFiles(onFound)
+// 对外 API：scanJunkFiles(onFound)
+// onFound 每次找到一个文件会收到回调
 async function scanJunkFiles(onFound) {
+  // 建议外部定义这些路径（Windows 为例），这里你可以自定义
+  const os = require('os');
+  const junkPaths = [
+    os.tmpdir(),
+    path.join(os.homedir(), 'AppData', 'Local', 'Temp'),
+    path.join(os.homedir(), 'AppData', 'Local', 'Microsoft', 'Windows', 'INetCache'),
+    path.join(os.homedir(), 'AppData', 'Local', 'Google', 'Chrome', 'User Data', 'Default', 'Cache'),
+  ];
+
   for (const p of junkPaths) {
     await scanFolder(p, onFound);
   }
 }
 
-// 删除数组 selectedPaths；onProgress(count,path)；onSkip(path,reason)
+// 删除数组 selectedPaths；
+// onProgress(count, path) 每处理一项回调；onSkip(path,reason) 跳过回调
 async function deleteSelectedPaths(selectedPaths = [], onProgress, onSkip) {
   let count = 0;
   for (const p of selectedPaths) {
@@ -113,4 +119,5 @@ async function deleteSelectedPaths(selectedPaths = [], onProgress, onSkip) {
 module.exports = {
   scanJunkFiles,
   deleteSelectedPaths,
+  formatSize,
 };
