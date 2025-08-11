@@ -120,8 +120,9 @@ ipcMain.on('delete-junk', async (event, files) => {
         mainWindow && mainWindow.webContents.send('delete-progress', count, currentPath);
       },
       (skippedPath, reason) => {
-        const line = `${new Date().toISOString()}\t${skippedPath}\t${reason}`;
-        appendSkipLog(line);
+        // 不写入日志
+        // const line = `${new Date().toISOString()}\t${skippedPath}\t${reason}`;
+        // appendSkipLog(line);
         mainWindow && mainWindow.webContents.send('delete-skip', skippedPath, reason);
       }
     );

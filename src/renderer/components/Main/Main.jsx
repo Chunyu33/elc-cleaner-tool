@@ -479,7 +479,7 @@ export default function Main() {
             清理已选 ({selectedPaths.size})
           </Button>
           <Button onClick={toggleSelectAll}>全选 / 取消全选</Button>
-          <Button onClick={openSkipLog}>打开跳过日志</Button>
+          {/* <Button onClick={openSkipLog}>打开跳过日志</Button> */}
           <Button onClick={runCleanmgr}>一键磁盘清理</Button>
         </Space>
 
