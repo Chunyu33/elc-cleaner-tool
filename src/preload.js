@@ -40,7 +40,7 @@ contextBridge.exposeInMainWorld('api', {
     return () => ipcRenderer.removeListener('delete-skip', listener);
   },
   onDeleteComplete: (cb) => {
-    const listener = () => cb && cb();
+    const listener = (event, deletedCount) => cb && cb(deletedCount);
     ipcRenderer.on('delete-complete', listener);
     return () => ipcRenderer.removeListener('delete-complete', listener);
   },

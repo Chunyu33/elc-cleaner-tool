@@ -51,6 +51,7 @@ button:disabled {
 }
 
 .total-found{
+  user-select: none;
   margin-top: 10px;
   color: #666;
 }
@@ -58,6 +59,7 @@ button:disabled {
 .list-container {
   margin-top: 12px;
   border-radius: 6px;
+  user-select: none;
   overflow: hidden;
   box-shadow: 0 6px 18px rgba(0,0,0,0.06);
   background-color: #fff;

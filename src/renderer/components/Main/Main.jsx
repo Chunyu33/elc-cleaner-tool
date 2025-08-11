@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { FixedSizeList as List } from 'react-window';
-import { Modal, Button, message } from 'antd';
+import { message, Select, Space } from 'antd';
 import './Main.css';
 
 // 可调参数
@@ -40,13 +40,12 @@ export default function Main() {
   const [totalFound, setTotalFound] = useState(0);
   const [totalSizeFoundBytes, setTotalSizeFoundBytes] = useState(0); // 总大小（字节）
   const [totalSizeSelectedBytes, setTotalSizeSelectedBytes] = useState(0); // 已选大小（字节）
-  const [deleteResult, setDeleteResult] = useState(null);
+  const [deletedCount, setDeletedCount] = useState(0);
+
   
   // 使用 ref 跟踪删除过程中的数据
   const deletedSizeRef = useRef(0);
-  const deletedCountRef = useRef(0);
   const skippedCountRef = useRef(0);
-  const skippedPathsRef = useRef([]);
 
   // UI state
   const [groupBy, setGroupBy] = useState('none'); // none | size | path
@@ -211,10 +210,6 @@ export default function Main() {
             setTotalSizeSelectedBytes(prevSize => prevSize - deletedItem.size);
           }
 
-          // 累加已删除文件的大小
-          deletedSizeRef.current += deletedItem.size;
-          deletedCountRef.current += 1; // 增加删除计数
-          
           const copy = prev.slice();
           copy.splice(idx, 1);
           setTotalFound(copy.length);
@@ -231,16 +226,17 @@ export default function Main() {
 
       // 添加到跳过列表
       skippedCountRef.current += 1;
-      skippedPathsRef.current.push({ path: p, reason });
     });
 
-    const unsubComplete = window.api.onDeleteComplete(() => {
+    const unsubComplete = window.api.onDeleteComplete((count) => {
+      setDeletedCount(count);
       // 显示简洁的消息提示
       if (skippedCountRef.current > 0) {
-        
-        console.warn(`已删除 ${deletedCountRef.current} 个文件（${formatSize(deletedSizeRef.current)}），${skippedCountRef.current} 个文件被跳过`)
+        message.warning(`已删除 ${count} 个文件，${skippedCountRef.current} 个文件被跳过（系统占用/无权限）`);
+        // console.warn(`已删除 ${count} 个文件（${formatSize(deletedSizeRef.current)}），${skippedCountRef.current} 个文件被跳过`)
       } else {
-        console.warn(`已成功删除 ${deletedCountRef.current} 个文件，释放空间 ${formatSize(deletedSizeRef.current)}`)
+        console.warn(`已成功删除 ${count} 个文件，释放空间 ${formatSize(deletedSizeRef.current)}`)
+        message.success(`已成功删除 ${count} 个文件`);
       }
       setDeleting(false);
       // 清除垃圾文件 进度条完成
@@ -248,8 +244,6 @@ export default function Main() {
       setTimeout(() => setProgressPct(0), 900);
       setTotalSizeFoundBytes(0);
       setTotalSizeSelectedBytes(0);
-      // alert(`已成功删除文件，总大小: ${formatSize(deletedSizeRef.current)}`);
-      // alert(`已成功删除 ${deletedCount} 个文件，总大小: ${formatSize(deletedSizeRef.current)}`);
     });
 
     const unsubBusy = window.api.onDeleteBusy(() => {
@@ -310,7 +304,7 @@ export default function Main() {
   }, [items, groupBy, fileType, sizeFilters]);
 
   // 虚拟列表的参数
-  const listHeight = 300;
+  const listHeight = 360;
   const itemCount = filteredFlat.length;
   const itemSize = ROW_HEIGHT;
 
@@ -320,7 +314,6 @@ export default function Main() {
     bufferRef.current = [];
     stopFlushTimer();
     deletedSizeRef.current = 0;
-    deletedCountRef.current = 0;
     skippedCountRef.current = 0;
     seen.current = new Set();
     extSet.current = new Set();
@@ -378,9 +371,9 @@ export default function Main() {
       alert('未选择任何要删除的项。');
       return;
     }
+    // 清空UI中的跳过列表
+    setSkippedList([]);
     // 重置数据
-    deletedSizeRef.current = 0;
-    deletedCountRef.current = 0;
     skippedCountRef.current = 0;
     setInitialDeleteTotal(toDelete.length);
     setDeleteProcessed(0);
@@ -461,18 +454,37 @@ export default function Main() {
         <div className='filter-row'>
           <label>
             分组:
-            <select value={groupBy} onChange={e => setGroupBy(e.target.value)} style={{ marginLeft: 6 }}>
+            {/* <select value={groupBy} onChange={e => setGroupBy(e.target.value)} style={{ marginLeft: 6 }}>
               <option value="none">无</option>
               <option value="size">按大小</option>
               <option value="path">按路径</option>
-            </select>
+            </select> */}
+            <Select
+              defaultValue="none"
+              style={{ marginLeft: 10, width: 80 }}
+              onChange={setGroupBy}
+              options={[
+                { value: 'none', label: '无' },
+                { value: 'size', label: '按大小' },
+                { value: 'path', label: '按路径' },
+              ]}
+            />
           </label>
 
           <label style={{ marginLeft: 8 }}>
             文件类型:
-            <select value={fileType} onChange={e => setFileType(e.target.value)} style={{ marginLeft: 6 }}>
+            {/* <select value={fileType} onChange={e => setFileType(e.target.value)} style={{ marginLeft: 6 }}>
               {fileTypeOptions.map(ft => <option key={ft} value={ft}>{ft === '__all__' ? '全部' : '.' + ft}</option>)}
-            </select>
+            </select> */}
+            <Select
+              value={fileType}
+              onChange={setFileType}
+              style={{ marginLeft: 6, width: 120 }}
+              options={fileTypeOptions.map(ft => ({
+                value: ft,
+                label: ft === '__all__' ? '全部' : '.' + ft
+              }))}
+            />
           </label>
 
           <div style={{ marginLeft: 8 }}>
@@ -504,7 +516,7 @@ export default function Main() {
         </div>
       </div>
 
-      <div style={{ marginTop: 12 }}>
+      {/* <div style={{ marginTop: 12 }}>
         <h4>已跳过（系统占用/无权限等）{skippedList.length}&nbsp;项</h4>
         <div className='pass'>
           {skippedList.length === 0 ? <div className='pass-none'>暂无</div> : skippedList.map((s, idx) => (
@@ -513,7 +525,7 @@ export default function Main() {
             </div>
           ))}
         </div>
-      </div>
+      </div> */}
 
       <div className='progress'>
         <div className='progress-ctx'>

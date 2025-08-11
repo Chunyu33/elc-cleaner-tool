@@ -38,6 +38,7 @@
     "style-loader": "^3.3.4"
   },
   "dependencies": {
+    "@ant-design/v5-patch-for-react-19": "^1.0.3",
     "antd": "^5.26.7",
     "electron-squirrel-startup": "^1.0.1",
     "fs-extra": "^11.3.1",

@@ -9,6 +9,7 @@ if (require('electron-squirrel-startup')) app.quit();
 let mainWindow;
 let scanning = false;
 let deleting = false;
+let deletedCountRef = { current: 0 };
 
 function getSkipLogPath() {
   const dir = app.getPath('userData') || __dirname;
@@ -61,7 +62,7 @@ Menu.setApplicationMenu(null); // 移除菜单
 const createWindow = () => {
   mainWindow = new BrowserWindow({
     width: 1000,
-    height: 800,
+    height: 600,
     frame: false, // 关闭系统标题栏
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : undefined, // Mac 优化
     webPreferences: {
@@ -113,6 +114,7 @@ ipcMain.on('delete-junk', async (event, files) => {
   try {
     await deleteSelectedPaths(files || [],
       (count, currentPath) => {
+        deletedCountRef.current += 1;
         mainWindow && mainWindow.webContents.send('delete-progress', count, currentPath);
       },
       (skippedPath, reason) => {
@@ -121,11 +123,12 @@ ipcMain.on('delete-junk', async (event, files) => {
         mainWindow && mainWindow.webContents.send('delete-skip', skippedPath, reason);
       }
     );
-    mainWindow && mainWindow.webContents.send('delete-complete');
+    mainWindow && mainWindow.webContents.send('delete-complete', deletedCountRef.current);
   } catch (err) {
     mainWindow && mainWindow.webContents.send('delete-error', err && (err.message || err.code));
   } finally {
     deleting = false;
+    deletedCountRef.current = 0;
   }
 });
 

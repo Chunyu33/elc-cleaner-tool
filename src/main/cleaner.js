@@ -77,23 +77,60 @@ async function scanJunkFiles(onFound) {
   }
 }
 
-// 删除数组 selectedPaths；
 // onProgress(count, path) 每处理一项回调；onSkip(path,reason) 跳过回调
+// async function deleteSelectedPaths(selectedPaths = [], onProgress, onSkip) {
+//   let count = 0;
+//   for (const p of selectedPaths) {
+//     try {
+//       const st = await fsp.stat(p).catch(() => null);
+//       if (!st) {
+//         // 不存在，视为已处理
+//         count++;
+//         onProgress && onProgress(count, p);
+//         continue;
+//       }
+
+//       if (st.isDirectory()) {
+//         try {
+//           await safeRemove(p);
+//         } catch (err) {
+//           const reason = (err && err.code) || (err && err.message) || 'unknown';
+//           onSkip && onSkip(p, reason);
+//         }
+//       } else {
+//         try {
+//           await fsp.unlink(p);
+//         } catch (err) {
+//           const reason = (err && err.code) || (err && err.message) || 'unknown';
+//           onSkip && onSkip(p, reason);
+//         }
+//       }
+//     } catch (err) {
+//       const reason = (err && err.code) || (err && err.message) || 'unknown';
+//       onSkip && onSkip(p, reason);
+//     } finally {
+//       count++;
+//       onProgress && onProgress(count, p);
+//     }
+//   }
+// }
 async function deleteSelectedPaths(selectedPaths = [], onProgress, onSkip) {
   let count = 0;
   for (const p of selectedPaths) {
     try {
       const st = await fsp.stat(p).catch(() => null);
       if (!st) {
-        // 不存在，视为已处理
+        // 文件不存在，视为已删除
         count++;
         onProgress && onProgress(count, p);
         continue;
       }
 
+      let deleted = false;
       if (st.isDirectory()) {
         try {
           await safeRemove(p);
+          deleted = true;
         } catch (err) {
           const reason = (err && err.code) || (err && err.message) || 'unknown';
           onSkip && onSkip(p, reason);
@@ -101,17 +138,21 @@ async function deleteSelectedPaths(selectedPaths = [], onProgress, onSkip) {
       } else {
         try {
           await fsp.unlink(p);
+          deleted = true;
         } catch (err) {
           const reason = (err && err.code) || (err && err.message) || 'unknown';
           onSkip && onSkip(p, reason);
         }
       }
+      
+      // 只有在成功删除时才触发 onProgress
+      if (deleted) {
+        count++;
+        onProgress && onProgress(count, p);
+      }
     } catch (err) {
       const reason = (err && err.code) || (err && err.message) || 'unknown';
       onSkip && onSkip(p, reason);
-    } finally {
-      count++;
-      onProgress && onProgress(count, p);
     }
   }
 }
