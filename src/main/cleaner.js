@@ -2,6 +2,7 @@
 const fsp = require('fs').promises;
 const fs = require('fs');
 const path = require('path');
+const { exec } = require('child_process');
 
 function formatSize(bytes) {
   if (!bytes || bytes <= 0) return '0 B';
@@ -157,8 +158,22 @@ async function deleteSelectedPaths(selectedPaths = [], onProgress, onSkip) {
   }
 }
 
+// 执行 Windows 自带的磁盘清理工具
+async function cleanmgrExec() {
+  return new Promise((resolve, reject) => {
+    exec('cleanmgr', (error) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve();
+    });
+  });
+}
+
 module.exports = {
   scanJunkFiles,
   deleteSelectedPaths,
   formatSize,
+  cleanmgrExec,
 };

@@ -1,8 +1,9 @@
 // main.js
 const { app, BrowserWindow, ipcMain, shell, Menu } = require('electron');
+const { exec } = require('child_process');
 const path = require('path');
 const fs = require('fs');
-const { scanJunkFiles, deleteSelectedPaths } = require('./main/cleaner');
+const { scanJunkFiles, deleteSelectedPaths, cleanmgrExec } = require('./main/cleaner');
 
 if (require('electron-squirrel-startup')) app.quit();
 
@@ -73,6 +74,7 @@ const createWindow = () => {
 
   mainWindow.loadURL(MAIN_WINDOW_WEBPACK_ENTRY);
   mainWindow.webContents.openDevTools({ mode: 'right' }); // 开发阶段打开
+
 };
 
 app.whenReady().then(createWindow);
@@ -154,6 +156,26 @@ ipcMain.handle('open-skip-log', async () => {
     return false;
   }
 });
+
+// 打开磁盘清理
+ipcMain.handle('run-cleanmgr', async () => {
+  try {
+    await cleanmgrExec();
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message || '未知错误' };
+  }
+});
+
+// 添加可用性检查
+ipcMain.handle('check-cleanmgr-available', async () => {
+  return new Promise((resolve) => {
+    exec('where cleanmgr', (error) => {
+      resolve(!error);
+    });
+  });
+});
+
 
 // 窗口控制、以及其他事件
 ipcMain.on('window:minimize', () => {

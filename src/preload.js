@@ -50,6 +50,12 @@ contextBridge.exposeInMainWorld('api', {
     return () => ipcRenderer.removeListener('delete-busy', listener);
   },
 
+  // 一键打开磁盘清理工具 API
+  runCleanmgr: () => ipcRenderer.invoke('run-cleanmgr'),
+
+  // 添加可用性检查
+  onCleanmgrAvailable: () => ipcRenderer.invoke('check-cleanmgr-available'),
+
   // 日志读取 / 打开
   readSkipLog: () => ipcRenderer.invoke('read-skip-log'),
   openSkipLog: () => ipcRenderer.invoke('open-skip-log'),

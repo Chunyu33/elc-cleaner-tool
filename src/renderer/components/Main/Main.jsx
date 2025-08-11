@@ -42,6 +42,10 @@ export default function Main() {
   const [totalSizeSelectedBytes, setTotalSizeSelectedBytes] = useState(0); // 已选大小（字节）
   const [deletedCount, setDeletedCount] = useState(0);
 
+  // 一键打开磁盘清理工具state
+  const [cleanmgrAvailable, setCleanmgrAvailable] = useState(false);
+  const [cleanmgrRunning, setCleanmgrRunning] = useState(false);
+
   
   // 使用 ref 跟踪删除过程中的数据
   const deletedSizeRef = useRef(0);
@@ -249,6 +253,16 @@ export default function Main() {
     };
   }, [initialDeleteTotal]);
 
+  // 磁盘清理工具可用性检查订阅
+  useEffect(() => {
+    const checkAvailability = async () => {
+      const available = await window.api.onCleanmgrAvailable();
+      setCleanmgrAvailable(available);
+    };
+    
+    checkAvailability();
+  }, []);
+
   // 过滤器和分组：生成带有组标题的扁平列表
   const filteredFlat = useMemo(() => {
     const ft = fileType === '__all__' ? null : fileType;
@@ -371,6 +385,26 @@ export default function Main() {
     window.api.deleteJunk(toDelete);
   };
 
+  // 一键打开磁盘清理工具
+  const runCleanmgr = async () => {
+    setCleanmgrRunning(true);
+    try {
+      // const result = await window.api.runCleanmgr();
+      // console.log(result, '-=------res')
+      // if (result.success) {
+      //   message.success('Windows 磁盘清理工具已启动');
+      // } else {
+      //   message.error(`启动失败: ${result.error}`);
+      // }
+      window.api.runCleanmgr();
+      message.success('Windows 磁盘清理工具已启动');
+    } catch (error) {
+      message.error(`启动失败: ${error.message || '未知错误'}`);
+    } finally {
+      setCleanmgrRunning(false);
+    }
+  };
+
   // 打开日志所在文件夹
   const openSkipLog = async () => {
     const ok = await window.api.openSkipLog();
@@ -446,6 +480,7 @@ export default function Main() {
           </Button>
           <Button onClick={toggleSelectAll}>全选 / 取消全选</Button>
           <Button onClick={openSkipLog}>打开跳过日志</Button>
+          <Button onClick={runCleanmgr}>一键磁盘清理</Button>
         </Space>
 
         <div className='filter-row'>

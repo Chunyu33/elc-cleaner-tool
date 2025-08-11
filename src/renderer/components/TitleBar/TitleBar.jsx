@@ -1,5 +1,5 @@
 import React from 'react';
-import { Menu, Dropdown, Button } from 'antd';
+import { Menu, Dropdown, Button, Space } from 'antd';
 import { DownOutlined } from '@ant-design/icons';
 import './TitleBar.css';
 
@@ -35,13 +35,15 @@ export default function TitleBar() {
     <div className="title-bar">
       {/* 左侧 Ant Design 下拉菜单 */}
       <div className="title-bar-left">
-        {menuConfig.map((menu, idx) => (
-          <Dropdown arrow={false} key={idx} overlay={buildMenu(menu.items)} trigger={['hover']}>
-            <Button type="text" style={{ color: 'white' }}>
-              {menu.title} <DownOutlined />
-            </Button>
-          </Dropdown>
-        ))}
+        <Space wrap>
+          {menuConfig.map((menu, idx) => (
+            <Dropdown arrow={false} key={idx} overlay={buildMenu(menu.items)} trigger={['hover']}>
+              <Button type="text" style={{ color: 'white' }}>
+                {menu.title}
+              </Button>
+            </Dropdown>
+          ))}
+        </Space>
       </div>
 
       {/* 中间标题 */}
