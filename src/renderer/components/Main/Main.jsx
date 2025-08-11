@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { FixedSizeList as List } from 'react-window';
+import { Modal, Button, message } from 'antd';
 import './Main.css';
 
 // 可调参数
@@ -17,6 +18,13 @@ function sizeBucket(size) {
   if (size >= 1 * 1024 * 1024) return '1 - 10 MB';
   return '< 1 MB';
 }
+function formatSize(bytes) {
+  if (!bytes || bytes <= 0) return '0 B';
+  if (bytes >= 1073741824) return (bytes / 1073741824).toFixed(2) + ' GB';
+  if (bytes >= 1048576) return (bytes / 1048576).toFixed(2) + ' MB';
+  if (bytes >= 1024) return (bytes / 1024).toFixed(2) + ' KB';
+  return bytes + ' B';
+}
 function parentFolderName(p) {
   const s = p.replace(/\\/g, '/');
   const parts = s.split('/');
@@ -30,6 +38,15 @@ export default function Main() {
   const extSet = useRef(new Set());
   const bufferRef = useRef([]);
   const [totalFound, setTotalFound] = useState(0);
+  const [totalSizeFoundBytes, setTotalSizeFoundBytes] = useState(0); // 总大小（字节）
+  const [totalSizeSelectedBytes, setTotalSizeSelectedBytes] = useState(0); // 已选大小（字节）
+  const [deleteResult, setDeleteResult] = useState(null);
+  
+  // 使用 ref 跟踪删除过程中的数据
+  const deletedSizeRef = useRef(0);
+  const deletedCountRef = useRef(0);
+  const skippedCountRef = useRef(0);
+  const skippedPathsRef = useRef([]);
 
   // UI state
   const [groupBy, setGroupBy] = useState('none'); // none | size | path
@@ -105,6 +122,10 @@ export default function Main() {
   useEffect(() => {
     const unsubItem = window.api.onScanItem((item) => {
       if (!item || !item.path) return;
+      // 累加总大小
+      setTotalSizeFoundBytes(prev => prev + item.size);
+      // 累加已选大小（因为新扫描的文件默认被选中）
+      setTotalSizeSelectedBytes(prev => prev + item.size);
       bufferRef.current.push(item);
       if (bufferRef.current.length >= IMMEDIATE_FLUSH_THRESHOLD) {
         // immediate flush
@@ -169,33 +190,71 @@ export default function Main() {
       setDeleteProcessed(count);
       setProgressPct(initialDeleteTotal > 0 ? Math.min(100, Math.floor((count / initialDeleteTotal) * 100)) : 100);
       // 如果存在，则删除已删除的项目
+      // setItems(prev => {
+      //   const idx = prev.findIndex(it => it.path === currentPath);
+      //   if (idx >= 0) {
+      //     const copy = prev.slice();
+      //     copy.splice(idx, 1);
+      //     setTotalFound(copy.length);
+      //     return copy;
+      //   }
+      //   return prev;
+      // });
       setItems(prev => {
         const idx = prev.findIndex(it => it.path === currentPath);
         if (idx >= 0) {
+          const deletedItem = prev[idx];
+          // 更新总大小（减去已删除文件的大小）
+          setTotalSizeFoundBytes(prevSize => prevSize - deletedItem.size);
+          // 更新已选大小（如果被选中，则减去）
+          if (deletedItem.selected) {
+            setTotalSizeSelectedBytes(prevSize => prevSize - deletedItem.size);
+          }
+
+          // 累加已删除文件的大小
+          deletedSizeRef.current += deletedItem.size;
+          deletedCountRef.current += 1; // 增加删除计数
+          
           const copy = prev.slice();
           copy.splice(idx, 1);
           setTotalFound(copy.length);
           return copy;
         }
         return prev;
-      });
+      })
     });
 
     const unsubSkip = window.api.onDeleteSkip((p, reason) => {
       // 在项目中标记为已跳过并附加到 skippedList
       setItems(prev => prev.map(it => it.path === p ? { ...it, skipped: true, skipReason: reason, selected: false } : it));
       setSkippedList(prev => [...prev, { path: p, reason }]);
+
+      // 添加到跳过列表
+      skippedCountRef.current += 1;
+      skippedPathsRef.current.push({ path: p, reason });
     });
 
     const unsubComplete = window.api.onDeleteComplete(() => {
+      // 显示简洁的消息提示
+      if (skippedCountRef.current > 0) {
+        
+        console.warn(`已删除 ${deletedCountRef.current} 个文件（${formatSize(deletedSizeRef.current)}），${skippedCountRef.current} 个文件被跳过`)
+      } else {
+        console.warn(`已成功删除 ${deletedCountRef.current} 个文件，释放空间 ${formatSize(deletedSizeRef.current)}`)
+      }
       setDeleting(false);
       // 清除垃圾文件 进度条完成
       setProgressPct(100);
       setTimeout(() => setProgressPct(0), 900);
+      setTotalSizeFoundBytes(0);
+      setTotalSizeSelectedBytes(0);
+      // alert(`已成功删除文件，总大小: ${formatSize(deletedSizeRef.current)}`);
+      // alert(`已成功删除 ${deletedCount} 个文件，总大小: ${formatSize(deletedSizeRef.current)}`);
     });
 
     const unsubBusy = window.api.onDeleteBusy(() => {
-      alert('删除任务正在运行，请稍候。');
+      // alert('删除任务正在运行，请稍候。');
+      message.warning('删除任务正在运行，请稍候。');
     });
 
     return () => {
@@ -260,8 +319,13 @@ export default function Main() {
     // 重置
     bufferRef.current = [];
     stopFlushTimer();
+    deletedSizeRef.current = 0;
+    deletedCountRef.current = 0;
+    skippedCountRef.current = 0;
     seen.current = new Set();
     extSet.current = new Set();
+    setTotalSizeFoundBytes(0);
+    setTotalSizeSelectedBytes(0);
     setItems([]);
     setSkippedList([]);
     setTotalFound(0);
@@ -274,7 +338,29 @@ export default function Main() {
 
   const toggleSelectAll = () => {
     const shouldSelectAll = items.some(it => !it.selected && !it.skipped);
-    setItems(prev => prev.map(it => it.skipped ? { ...it, selected: false } : { ...it, selected: shouldSelectAll }));
+    // setItems(prev => prev.map(it => it.skipped ? { ...it, selected: false } : { ...it, selected: shouldSelectAll }));
+    setItems(prev => {
+      // 计算要改变的文件
+      const filesToChange = prev.filter(it => 
+        !it.skipped && 
+        it.selected !== shouldSelectAll
+      );
+      
+      // 计算总大小变化
+      const delta = filesToChange.reduce((sum, it) => {
+        return shouldSelectAll ? sum + it.size : sum - it.size;
+      }, 0);
+      
+      // 更新已选大小
+      setTotalSizeSelectedBytes(prevSize => prevSize + delta);
+      
+      // 更新items状态
+      return prev.map(it => 
+        it.skipped 
+          ? {...it, selected: false} 
+          : {...it, selected: shouldSelectAll}
+      );
+    });
   };
 
   const toggleSizeFilter = (bucket) => {
@@ -292,6 +378,10 @@ export default function Main() {
       alert('未选择任何要删除的项。');
       return;
     }
+    // 重置数据
+    deletedSizeRef.current = 0;
+    deletedCountRef.current = 0;
+    skippedCountRef.current = 0;
     setInitialDeleteTotal(toDelete.length);
     setDeleteProcessed(0);
     setProgressPct(0);
@@ -327,7 +417,20 @@ export default function Main() {
           checked={!!it.selected}
           disabled={it.skipped}
           onChange={() => {
-            setItems(prev => prev.map(x => x.path === it.path ? { ...x, selected: !x.selected } : x));
+            // setItems(prev => prev.map(x => x.path === it.path ? { ...x, selected: !x.selected } : x));
+            setItems(prev => {
+              const updatedItems = prev.map(x => 
+                x.path === it.path ? {...x, selected: !x.selected} : x
+              );
+              
+              // 计算文件大小变化
+              const delta = it.selected ? -it.size : it.size;
+              
+              // 更新已选大小
+              setTotalSizeSelectedBytes(prevSize => prevSize + delta);
+              
+              return updatedItems;
+            });
           }}
         />
         <div style={{ fontSize: 12, flex: 1, wordBreak: 'break-all' }}>
@@ -384,7 +487,7 @@ export default function Main() {
       </div>
 
       <div className='total-found'>
-        已发现: {totalFound} 项；已选: {selectedPaths.size} 项
+        已发现: {totalFound} 项，总大小 {formatSize(totalSizeFoundBytes)}；已选: {selectedPaths.size} 项，总大小 {formatSize(totalSizeSelectedBytes)}
       </div>
 
       <div className='list-container'>
