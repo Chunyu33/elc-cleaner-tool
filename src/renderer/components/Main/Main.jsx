@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { FixedSizeList as List } from 'react-window';
-import { message, Select, Space } from 'antd';
+import { Button, Space, message, Select, Checkbox } from 'antd';
 import './Main.css';
 
 // 可调参数
@@ -189,16 +189,6 @@ export default function Main() {
       setDeleteProcessed(count);
       setProgressPct(initialDeleteTotal > 0 ? Math.min(100, Math.floor((count / initialDeleteTotal) * 100)) : 100);
       // 如果存在，则删除已删除的项目
-      // setItems(prev => {
-      //   const idx = prev.findIndex(it => it.path === currentPath);
-      //   if (idx >= 0) {
-      //     const copy = prev.slice();
-      //     copy.splice(idx, 1);
-      //     setTotalFound(copy.length);
-      //     return copy;
-      //   }
-      //   return prev;
-      // });
       setItems(prev => {
         const idx = prev.findIndex(it => it.path === currentPath);
         if (idx >= 0) {
@@ -235,7 +225,7 @@ export default function Main() {
         message.warning(`已删除 ${count} 个文件，${skippedCountRef.current} 个文件被跳过（系统占用/无权限）`);
         // console.warn(`已删除 ${count} 个文件（${formatSize(deletedSizeRef.current)}），${skippedCountRef.current} 个文件被跳过`)
       } else {
-        console.warn(`已成功删除 ${count} 个文件，释放空间 ${formatSize(deletedSizeRef.current)}`)
+        // console.warn(`已成功删除 ${count} 个文件，释放空间 ${formatSize(deletedSizeRef.current)}`)
         message.success(`已成功删除 ${count} 个文件`);
       }
       setDeleting(false);
@@ -331,7 +321,6 @@ export default function Main() {
 
   const toggleSelectAll = () => {
     const shouldSelectAll = items.some(it => !it.selected && !it.skipped);
-    // setItems(prev => prev.map(it => it.skipped ? { ...it, selected: false } : { ...it, selected: shouldSelectAll }));
     setItems(prev => {
       // 计算要改变的文件
       const filesToChange = prev.filter(it => 
@@ -405,19 +394,18 @@ export default function Main() {
     const it = row.item;
     return (
       <div style={{ ...style, display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', boxSizing: 'border-box' }}>
-        <input
-          type="checkbox"
+        <Checkbox
           checked={!!it.selected}
           disabled={it.skipped}
-          onChange={() => {
-            // setItems(prev => prev.map(x => x.path === it.path ? { ...x, selected: !x.selected } : x));
+          onChange={(e) => {
+            const checked = e.target.checked;
             setItems(prev => {
               const updatedItems = prev.map(x => 
-                x.path === it.path ? {...x, selected: !x.selected} : x
+                x.path === it.path ? {...x, selected: checked} : x
               );
               
               // 计算文件大小变化
-              const delta = it.selected ? -it.size : it.size;
+              const delta = checked ? it.size : -it.size;
               
               // 更新已选大小
               setTotalSizeSelectedBytes(prevSize => prevSize + delta);
@@ -446,19 +434,23 @@ export default function Main() {
     <div className="container">
 
       <div className='operator'>
-        <button onClick={startScan}>扫描垃圾</button>
-        <button onClick={startDelete} disabled={deleting || selectedPaths.size === 0}>清理已选 ({selectedPaths.size})</button>
-        <button onClick={toggleSelectAll}>全选 / 取消全选</button>
-        <button onClick={openSkipLog}>打开跳过日志</button>
+        <Space>
+          <Button type="primary" onClick={startScan}>扫描垃圾</Button>
+          <Button 
+            type="primary" 
+            danger 
+            onClick={startDelete} 
+            disabled={deleting || selectedPaths.size === 0}
+          >
+            清理已选 ({selectedPaths.size})
+          </Button>
+          <Button onClick={toggleSelectAll}>全选 / 取消全选</Button>
+          <Button onClick={openSkipLog}>打开跳过日志</Button>
+        </Space>
 
         <div className='filter-row'>
           <label>
             分组:
-            {/* <select value={groupBy} onChange={e => setGroupBy(e.target.value)} style={{ marginLeft: 6 }}>
-              <option value="none">无</option>
-              <option value="size">按大小</option>
-              <option value="path">按路径</option>
-            </select> */}
             <Select
               defaultValue="none"
               style={{ marginLeft: 10, width: 80 }}
@@ -473,9 +465,6 @@ export default function Main() {
 
           <label style={{ marginLeft: 8 }}>
             文件类型:
-            {/* <select value={fileType} onChange={e => setFileType(e.target.value)} style={{ marginLeft: 6 }}>
-              {fileTypeOptions.map(ft => <option key={ft} value={ft}>{ft === '__all__' ? '全部' : '.' + ft}</option>)}
-            </select> */}
             <Select
               value={fileType}
               onChange={setFileType}
@@ -490,9 +479,14 @@ export default function Main() {
           <div style={{ marginLeft: 8 }}>
             大小:
             {['>=100 MB','10 - 100 MB','1 - 10 MB','< 1 MB'].map(b => (
-              <label key={b} style={{ marginLeft: 6 }}>
-                <input type="checkbox" checked={sizeFilters.has(b)} onChange={() => toggleSizeFilter(b)} /> {b}
-              </label>
+              <Checkbox
+                key={b}
+                style={{ marginLeft: 6 }}
+                checked={sizeFilters.has(b)}
+                onChange={(e) => toggleSizeFilter(b)}
+              >
+                {b}
+              </Checkbox>
             ))}
           </div>
         </div>
