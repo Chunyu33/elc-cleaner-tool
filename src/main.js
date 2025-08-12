@@ -63,17 +63,19 @@ Menu.setApplicationMenu(null); // 移除菜单
 const createWindow = () => {
   mainWindow = new BrowserWindow({
     width: 1000,
-    height: 600,
+    height: 680,
     frame: false, // 关闭系统标题栏
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : undefined, // Mac 优化
     webPreferences: {
+      // nodeIntegration: true,
+      // contextIsolation: false,
       preload: MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY, // electron-forge webpack 注入
       icon: path.join(__dirname, 'assets/icon', 'favicon.ico')
     },
   });
 
   mainWindow.loadURL(MAIN_WINDOW_WEBPACK_ENTRY);
-  mainWindow.webContents.openDevTools({ mode: 'right' }); // 开发阶段打开
+  mainWindow.webContents.openDevTools(); // 开发阶段打开
 
 };
 
@@ -88,16 +90,48 @@ app.on('window-all-closed', () => {
 });
 
 // 扫描：逐条发送 scan-item
+// ipcMain.on('scan-junk', async (event) => {
+//   if (scanning) {
+//     mainWindow && mainWindow.webContents.send('scan-busy');
+//     return;
+//   }
+//   scanning = true;
+//   try {
+//     // await scanJunkFiles((fileInfo) => {
+//     //   mainWindow && mainWindow.webContents.send('scan-item', fileInfo);
+//     // });
+//     await scanJunkFiles(
+//       (fileInfo) => {
+//         mainWindow && mainWindow.webContents.send('scan-item', fileInfo);
+//       },
+//       (progress, current, total, currentPath) => {
+//         mainWindow && mainWindow.webContents.send('scan-progress', progress, current, total, currentPath);
+//       }
+//     );
+//     mainWindow && mainWindow.webContents.send('scan-complete');
+//   } catch (err) {
+//     mainWindow && mainWindow.webContents.send('scan-error', err && (err.message || err.code));
+//   } finally {
+//     scanning = false;
+//   }
+// });
+
 ipcMain.on('scan-junk', async (event) => {
   if (scanning) {
     mainWindow && mainWindow.webContents.send('scan-busy');
     return;
   }
   scanning = true;
+  
   try {
-    await scanJunkFiles((fileInfo) => {
-      mainWindow && mainWindow.webContents.send('scan-item', fileInfo);
-    });
+    await scanJunkFiles(
+      (fileInfo) => {
+        mainWindow && mainWindow.webContents.send('scan-item', fileInfo);
+      },
+      (progress, current, total, currentPath) => {
+        mainWindow && mainWindow.webContents.send('scan-progress', progress, current, total, currentPath);
+      }
+    );
     mainWindow && mainWindow.webContents.send('scan-complete');
   } catch (err) {
     mainWindow && mainWindow.webContents.send('scan-error', err && (err.message || err.code));

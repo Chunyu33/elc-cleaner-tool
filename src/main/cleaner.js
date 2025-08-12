@@ -4,6 +4,8 @@ const os = require('os');
 const fs = require('fs');
 const path = require('path');
 const { exec } = require('child_process');
+const { Worker } = require('worker_threads');
+const scanWorkerString = require('./scanWorkerStr');
 
 function formatSize(bytes) {
   if (!bytes || bytes <= 0) return '0 B';
@@ -45,100 +47,147 @@ const MIN_FILE_SIZE = 1024; // 最小文件大小 (1KB)
 const JUNK_EXTENSIONS = ['.tmp', '.log', '.cache', '.bak', '.old', '.temp', '.dmp', '.chk'];
 
 async function scanJunkFiles(onFound, onProgress) {
-  const homedir = os.homedir();
-  const appData = process.env.APPDATA || path.join(homedir, 'AppData', 'Roaming');
-  const localAppData = process.env.LOCALAPPDATA || path.join(homedir, 'AppData', 'Local');
-  const programData = process.env.ProgramData || path.join('C:', 'ProgramData');
-  
-  // 垃圾文件路径列表
-  const junkPaths = [
-    // 系统临时文件
-    os.tmpdir(),
-    path.join(localAppData, 'Temp'),
-    
-    // 浏览器缓存
-    path.join(localAppData, 'Google', 'Chrome', 'User Data', 'Default', 'Cache'),
-    path.join(localAppData, 'Google', 'Chrome', 'User Data', 'Default', 'Media Cache'),
-    path.join(localAppData, 'Microsoft', 'Edge', 'User Data', 'Default', 'Cache'),
-    path.join(localAppData, 'Mozilla', 'Firefox', 'Profiles'),
-    path.join(localAppData, 'Opera Software', 'Opera Stable', 'Cache'),
-    path.join(localAppData, 'BraveSoftware', 'Brave-Browser', 'User Data', 'Default', 'Cache'),
-    
-    // Windows 系统缓存
-    path.join(localAppData, 'Microsoft', 'Windows', 'INetCache'),
-    path.join(localAppData, 'Microsoft', 'Windows', 'INetCookies'),
-    path.join(localAppData, 'Microsoft', 'Windows', 'History'),
-    path.join(localAppData, 'Microsoft', 'Windows', 'WER'),
-    
-    // 应用程序缓存
-    path.join(localAppData, 'Adobe'),
-    path.join(localAppData, 'Apple Computer'),
-    path.join(localAppData, 'Spotify'),
-    path.join(localAppData, 'Discord'),
-    path.join(localAppData, 'Zoom'),
-    path.join(localAppData, 'Steam'),
-    
-    // 软件更新缓存
-    path.join(programData, 'Package Cache'),
-    path.join(localAppData, 'Microsoft', 'Windows', 'Temporary Internet Files'),
-    
-    // 日志文件
-    path.join(localAppData, 'Diagnostics'),
-    path.join(programData, 'Microsoft', 'Windows', 'WER'),
-    
-    // 回收站
-    path.join('C:', '$Recycle.Bin'),
-    
-    // 缩略图缓存
-    path.join(localAppData, 'Microsoft', 'Windows', 'Explorer', 'thumbnails'),
-    
-    // 内存转储文件
-    path.join('C:', 'Windows', 'MEMORY.DMP'),
-    path.join('C:', 'Windows', 'Minidump'),
-    
-    // Windows 更新残留
-    path.join('C:', 'Windows', 'SoftwareDistribution', 'Download'),
-    path.join('C:', 'Windows', 'Temp'),
-    
-    // 下载目录中的临时文件
-    path.join(homedir, 'Downloads'),
-  ];
+  return new Promise((resolve, reject) => {
 
-  // 添加用户自定义路径
-  const customPaths = getCustomJunkPaths();
-  junkPaths.push(...customPaths);
+    const worker = new Worker(scanWorkerString, {
+      eval: true,
+      workerData: {} // 如果需要可以传参数
+    });
 
-  // 排除的关键系统目录
-  const excludedPaths = [
-    path.join('C:', 'Windows', 'System32'),
-    path.join('C:', 'Windows', 'SysWOW64'),
-    path.join('C:', 'Program Files'),
-    path.join('C:', 'Program Files (x86)'),
-    path.join(appData, 'Microsoft', 'Windows', 'Start Menu'),
-    path.join(localAppData, 'Microsoft', 'Windows', 'Explorer')
-  ];
-
-  // 扫描所有路径
-  let scannedCount = 0;
-  const totalPaths = junkPaths.length;
-  
-  for (const p of junkPaths) {
-    try {
-      // 更新进度
-      scannedCount++;
-      onProgress && onProgress(scannedCount, totalPaths, p);
-      
-      // 检查是否在排除列表中
-      const isExcluded = excludedPaths.some(excluded => p.startsWith(excluded));
-      
-      if (!isExcluded && fs.existsSync(p)) {
-        await scanFolder(p, onFound, 0);
+    let scannedPaths = 0;
+    let totalPaths = 0;
+    
+    worker.on('message', (message) => {
+      switch (message.type) {
+        case 'progress':
+          scannedPaths++;
+          const progress = Math.floor((scannedPaths / totalPaths) * 100);
+          onProgress && onProgress(progress, scannedPaths, totalPaths, message.path);
+          break;
+          
+        case 'file':
+          onFound && onFound(message.file);
+          break;
+          
+        case 'totalPaths':
+          totalPaths = message.count;
+          break;
+          
+        case 'complete':
+          resolve();
+          break;
+          
+        case 'error':
+          reject(new Error(message.error));
+          break;
       }
-    } catch (error) {
-      console.error(`扫描路径 ${p} 时出错:`, error);
-    }
-  }
+    });
+    
+    worker.on('error', reject);
+    worker.on('exit', (code) => {
+      if (code !== 0) {
+        reject(new Error(`Worker stopped with exit code ${code}`));
+      }
+    });
+  });
 }
+
+// 不再使用这里  改用worker
+// async function scanJunkFiles(onFound, onProgress) {
+//   const homedir = os.homedir();
+//   const appData = process.env.APPDATA || path.join(homedir, 'AppData', 'Roaming');
+//   const localAppData = process.env.LOCALAPPDATA || path.join(homedir, 'AppData', 'Local');
+//   const programData = process.env.ProgramData || path.join('C:', 'ProgramData');
+  
+//   // 垃圾文件路径列表
+//   const junkPaths = [
+//     // 系统临时文件
+//     os.tmpdir(),
+//     path.join(localAppData, 'Temp'),
+    
+//     // 浏览器缓存
+//     path.join(localAppData, 'Google', 'Chrome', 'User Data', 'Default', 'Cache'),
+//     path.join(localAppData, 'Google', 'Chrome', 'User Data', 'Default', 'Media Cache'),
+//     path.join(localAppData, 'Microsoft', 'Edge', 'User Data', 'Default', 'Cache'),
+//     path.join(localAppData, 'Mozilla', 'Firefox', 'Profiles'),
+//     path.join(localAppData, 'Opera Software', 'Opera Stable', 'Cache'),
+//     path.join(localAppData, 'BraveSoftware', 'Brave-Browser', 'User Data', 'Default', 'Cache'),
+    
+//     // Windows 系统缓存
+//     path.join(localAppData, 'Microsoft', 'Windows', 'INetCache'),
+//     path.join(localAppData, 'Microsoft', 'Windows', 'INetCookies'),
+//     path.join(localAppData, 'Microsoft', 'Windows', 'History'),
+//     path.join(localAppData, 'Microsoft', 'Windows', 'WER'),
+    
+//     // 应用程序缓存
+//     path.join(localAppData, 'Adobe'),
+//     path.join(localAppData, 'Apple Computer'),
+//     path.join(localAppData, 'Spotify'),
+//     path.join(localAppData, 'Discord'),
+//     path.join(localAppData, 'Zoom'),
+//     path.join(localAppData, 'Steam'),
+    
+//     // 软件更新缓存
+//     path.join(programData, 'Package Cache'),
+//     path.join(localAppData, 'Microsoft', 'Windows', 'Temporary Internet Files'),
+    
+//     // 日志文件
+//     path.join(localAppData, 'Diagnostics'),
+//     path.join(programData, 'Microsoft', 'Windows', 'WER'),
+    
+//     // 回收站
+//     path.join('C:', '$Recycle.Bin'),
+    
+//     // 缩略图缓存
+//     path.join(localAppData, 'Microsoft', 'Windows', 'Explorer', 'thumbnails'),
+    
+//     // 内存转储文件
+//     path.join('C:', 'Windows', 'MEMORY.DMP'),
+//     path.join('C:', 'Windows', 'Minidump'),
+    
+//     // Windows 更新残留
+//     path.join('C:', 'Windows', 'SoftwareDistribution', 'Download'),
+//     path.join('C:', 'Windows', 'Temp'),
+    
+//     // 下载目录中的临时文件
+//     path.join(homedir, 'Downloads'),
+//   ];
+
+//   // 添加用户自定义路径
+//   const customPaths = getCustomJunkPaths();
+//   junkPaths.push(...customPaths);
+
+//   // 排除的关键系统目录
+//   const excludedPaths = [
+//     path.join('C:', 'Windows', 'System32'),
+//     path.join('C:', 'Windows', 'SysWOW64'),
+//     path.join('C:', 'Program Files'),
+//     path.join('C:', 'Program Files (x86)'),
+//     path.join(appData, 'Microsoft', 'Windows', 'Start Menu'),
+//     path.join(localAppData, 'Microsoft', 'Windows', 'Explorer')
+//   ];
+
+//   // 扫描所有路径
+//   let scannedPaths = 0;
+//   const totalPaths = junkPaths.length;
+  
+//   for (const p of junkPaths) {
+//     try {
+//       // 检查是否在排除列表中
+//       const isExcluded = excludedPaths.some(excluded => p.startsWith(excluded));
+      
+//       if (!isExcluded && fs.existsSync(p)) {
+//         await scanFolder(p, onFound, 0);
+//       }
+//       // 更新进度
+//       scannedPaths++;
+//       onProgress && onProgress(scannedPaths, totalPaths, p);
+//     } catch (error) {
+//       scannedPaths++;
+//       console.error(`扫描路径 ${p} 时出错:`, error);
+//     }
+//   }
+// }
 
 // 获取用户自定义的垃圾文件路径
 function getCustomJunkPaths() {

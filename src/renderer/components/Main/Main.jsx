@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { FixedSizeList as List } from 'react-window';
-import { Button, Space, message, Select, Checkbox } from 'antd';
+import { Button, Space, message, Select, Checkbox, Progress } from 'antd';
 import './Main.css';
 
 // 可调参数
@@ -263,6 +263,60 @@ export default function Main() {
     checkAvailability();
   }, []);
 
+  const [scanProgress, setScanProgress] = useState({
+    percent: 0,
+    current: 0,
+    total: 0,
+    currentPath: '',
+    visible: false
+  });
+  
+  // 使用状态管理文件计数
+  const [fileCount, setFileCount] = useState(0);
+  
+  // 订阅扫描进度事件
+  useEffect(() => {
+    const unsubProgress = window.api.onScanProgress((progress, current, total, currentPath) => {
+      setScanProgress({
+        percent: progress,
+        current,
+        total,
+        currentPath,
+        visible: true
+      });
+    });
+    
+    // 订阅文件发现事件
+    const unsubItem = window.api.onScanItem(() => {
+      setFileCount(prev => prev + 1);
+    });
+    
+    return () => {
+      unsubProgress && unsubProgress();
+      unsubItem && unsubItem();
+    };
+  }, []);
+  
+  // 扫描完成时重置进度
+  useEffect(() => {
+    const unsubComplete = window.api.onScanComplete(() => {
+      // 短暂显示100%后隐藏
+      setTimeout(() => {
+        setScanProgress(prev => ({
+          ...prev,
+          visible: false
+        }));
+        setFileCount(0);
+        message.success(`扫描完成`);
+      }, 3500);
+    });
+    
+    return () => {
+      unsubComplete && unsubComplete();
+    };
+  }, []);
+  
+
   // 过滤器和分组：生成带有组标题的扁平列表
   const filteredFlat = useMemo(() => {
     const ft = fileType === '__all__' ? null : fileType;
@@ -389,15 +443,8 @@ export default function Main() {
   const runCleanmgr = async () => {
     setCleanmgrRunning(true);
     try {
-      // const result = await window.api.runCleanmgr();
-      // console.log(result, '-=------res')
-      // if (result.success) {
-      //   message.success('Windows 磁盘清理工具已启动');
-      // } else {
-      //   message.error(`启动失败: ${result.error}`);
-      // }
       window.api.runCleanmgr();
-      message.success('Windows 磁盘清理工具已启动');
+      message.success('Windows 磁盘清理已启动');
     } catch (error) {
       message.error(`启动失败: ${error.message || '未知错误'}`);
     } finally {
@@ -488,7 +535,7 @@ export default function Main() {
             分组:
             <Select
               defaultValue="none"
-              style={{ marginLeft: 10, width: 80 }}
+              style={{ marginLeft: 10, width: 90 }}
               onChange={setGroupBy}
               options={[
                 { value: 'none', label: '无' },
@@ -527,9 +574,48 @@ export default function Main() {
         </div>
       </div>
 
-      <div className='total-found'>
-        已发现: {totalFound} 项，总大小 {formatSize(totalSizeFoundBytes)}；已选: {selectedPaths.size} 项，总大小 {formatSize(totalSizeSelectedBytes)}
-      </div>
+      {!scanProgress.visible && (
+        <div className='total-found'>
+          已发现: <strong>{totalFound}</strong> 项，总大小 <strong>{formatSize(totalSizeFoundBytes)}</strong>；
+          已选:  <strong>{selectedPaths.size}</strong> 项，总大小  <strong>{formatSize(totalSizeSelectedBytes)}</strong>
+        </div>
+      )}
+
+      {scanProgress.visible && (
+        <div className="scan-progress">
+          <Progress 
+            percent={scanProgress.percent}
+            status="active"
+            strokeColor={{
+              '0%': '#87d068',
+              '50%': '#ffe58f',
+              '100%': '#ffccc7',
+            }}
+          />
+          
+          <div className="progress-stats">
+            <div>
+              <span className="stat-label">扫描进度:</span>
+              <span className="stat-value">{scanProgress.percent}%</span>
+            </div>
+            <div>
+              <span className="stat-label">位置:</span>
+              <span className="stat-value">{scanProgress.current}/{scanProgress.total}</span>
+            </div>
+            <div>
+              <span className="stat-label">文件:</span>
+              <span className="stat-value">{fileCount}</span>
+            </div>
+          </div>
+          
+          {scanProgress.currentPath && (
+            <div className="current-path">
+              <span className="path-label">当前扫描:</span>
+              <span className="path-value">{scanProgress.currentPath}</span>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className='list-container'>
         <div>
@@ -556,14 +642,6 @@ export default function Main() {
         </div>
       </div> */}
 
-      <div className='progress'>
-        <div className='progress-ctx'>
-          {progressPct > 0 ? <div className='progress-bar' style={{ width: `${progressPct}%` }}>
-            {progressPct}% {deleting ? '' : ''}
-          </div> : <div></div>}
-          
-        </div>
-      </div>
     </div>
   );
 }

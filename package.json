@@ -35,7 +35,8 @@
     "css-loader": "^6.11.0",
     "electron": "37.2.6",
     "node-loader": "^2.1.0",
-    "style-loader": "^3.3.4"
+    "style-loader": "^3.3.4",
+    "worker-loader": "^3.0.8"
   },
   "dependencies": {
     "@ant-design/v5-patch-for-react-19": "^1.0.3",

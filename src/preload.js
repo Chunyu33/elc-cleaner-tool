@@ -17,6 +17,12 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.on('scan-complete', listener);
     return () => ipcRenderer.removeListener('scan-complete', listener);
   },
+  // 扫描进度
+  onScanProgress: (cb) => {
+    const listener = (event, progress, current, total, currentPath) => cb && cb(progress, current, total, currentPath);
+    ipcRenderer.on('scan-progress', listener);
+    return () => ipcRenderer.removeListener('scan-progress', listener);
+  },
   onScanError: (cb) => {
     const listener = (event, err) => cb && cb(err);
     ipcRenderer.on('scan-error', listener);

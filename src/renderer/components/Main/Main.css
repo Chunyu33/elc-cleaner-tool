@@ -23,6 +23,11 @@ button:disabled {
   align-items: content;
   flex-wrap: wrap;
   user-select: none;
+  padding: 12px;
+  background-color: #f8f9fa;
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
 }
 
 .filter-row {
@@ -54,6 +59,16 @@ button:disabled {
   user-select: none;
   margin-top: 10px;
   color: #666;
+  margin-top: 10px;
+  margin-bottom: 6px;
+  min-height: 70px;
+  padding: 12px;
+  background-color: #f8f9fa;
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
 }
 
 .list-container {
@@ -90,4 +105,53 @@ button:disabled {
   padding: 16px 24px;
   border-radius: 8px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.scan-progress {
+  margin-top: 10px;
+  margin-bottom: 6px;
+  padding: 12px;
+  background-color: #f8f9fa;
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
+}
+
+.progress-stats {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 8px;
+  font-size: 12px;
+}
+
+.stat-label {
+  font-weight: 600;
+  margin-right: 4px;
+  color: #666;
+}
+
+.stat-value {
+  color: #333;
+  font-weight: 500;
+}
+
+.current-path {
+  margin-top: 8px;
+  font-size: 12px;
+  display: flex;
+}
+
+.path-label {
+  font-weight: 600;
+  margin-right: 6px;
+  color: #666;
+  white-space: nowrap;
+}
+
+.path-value {
+  flex: 1;
+  color: #333;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
