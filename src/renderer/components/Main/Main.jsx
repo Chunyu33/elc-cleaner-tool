@@ -265,50 +265,91 @@ export default function Main() {
 
   const [scanProgress, setScanProgress] = useState({
     percent: 0,
-    current: 0,
-    total: 0,
+    currentPaths: 0,
+    totalPaths: 0,
     currentPath: '',
+    totalFiles: 0,
+    scannedFiles: 0,
     visible: false
   });
   
-  // 使用状态管理文件计数
-  const [fileCount, setFileCount] = useState(0);
+  // 存储扫描进度值
+  const progressRef = useRef({
+    percent: 0,
+    currentPaths: 0,
+    totalPaths: 0,
+    currentPath: '',
+    totalFiles: 0,
+    scannedFiles: 0
+  });
   
   // 订阅扫描进度事件
   useEffect(() => {
-    const unsubProgress = window.api.onScanProgress((progress, current, total, currentPath) => {
+    const unsubProgress = window.api.onScanProgress((progress, current, total, currentPath, totalFiles, scannedFiles) => {
+      // 更新 ref
+      progressRef.current = {
+        percent: progress,
+        currentPaths: current,
+        totalPaths: total,
+        currentPath,
+        totalFiles,
+        scannedFiles
+      };
+      
+      // 更新状态
       setScanProgress({
         percent: progress,
-        current,
-        total,
+        currentPaths: current,
+        totalPaths: total,
         currentPath,
+        totalFiles,
+        scannedFiles,
         visible: true
       });
     });
     
-    // 订阅文件发现事件
-    const unsubItem = window.api.onScanItem(() => {
-      setFileCount(prev => prev + 1);
+    return () => {
+      unsubProgress && unsubProgress();
+    };
+  }, []);
+  
+  // 订阅文件发现事件
+  useEffect(() => {
+    const unsubItem = window.api.onScanItem((file, totalFiles, scannedFiles) => {
+      // 更新文件计数
+      setScanProgress(prev => ({
+        ...prev,
+        totalFiles,
+        scannedFiles
+      }));
     });
     
     return () => {
-      unsubProgress && unsubProgress();
       unsubItem && unsubItem();
     };
   }, []);
   
-  // 扫描完成时重置进度
+  // 扫描完成时确保显示100%
   useEffect(() => {
     const unsubComplete = window.api.onScanComplete(() => {
-      // 短暂显示100%后隐藏
+      // 确保进度100%
+      setScanProgress({
+        percent: 100,
+        currentPaths: progressRef.current.totalPaths,
+        totalPaths: progressRef.current.totalPaths,
+        currentPath: '扫描完成',
+        totalFiles: progressRef.current.totalFiles,
+        scannedFiles: progressRef.current.scannedFiles,
+        visible: true
+      });
+      
+      // 3秒后隐藏进度条
       setTimeout(() => {
         setScanProgress(prev => ({
           ...prev,
           visible: false
         }));
-        setFileCount(0);
-        message.success(`扫描完成`);
-      }, 3500);
+      }, 3000);
     });
     
     return () => {
@@ -587,24 +628,26 @@ export default function Main() {
             percent={scanProgress.percent}
             status="active"
             strokeColor={{
-              '0%': '#87d068',
+              '0%': '#ffccc7',
               '50%': '#ffe58f',
-              '100%': '#ffccc7',
+              '100%': '#87d068',
             }}
           />
           
           <div className="progress-stats">
-            <div>
-              <span className="stat-label">扫描进度:</span>
+            <div className="stat-item">
+              <span className="stat-label">路径进度:</span>
+              <span className="stat-value">{scanProgress.currentPaths}/{scanProgress.totalPaths}</span>
+            </div>
+            
+            <div className="stat-item">
+              <span className="stat-label">文件进度:</span>
+              <span className="stat-value">{scanProgress.scannedFiles}/{scanProgress.totalFiles}</span>
+            </div>
+            
+            <div className="stat-item">
+              <span className="stat-label">总进度:</span>
               <span className="stat-value">{scanProgress.percent}%</span>
-            </div>
-            <div>
-              <span className="stat-label">位置:</span>
-              <span className="stat-value">{scanProgress.current}/{scanProgress.total}</span>
-            </div>
-            <div>
-              <span className="stat-label">文件:</span>
-              <span className="stat-value">{fileCount}</span>
             </div>
           </div>
           

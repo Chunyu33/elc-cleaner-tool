@@ -89,32 +89,7 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
 
-// 扫描：逐条发送 scan-item
-// ipcMain.on('scan-junk', async (event) => {
-//   if (scanning) {
-//     mainWindow && mainWindow.webContents.send('scan-busy');
-//     return;
-//   }
-//   scanning = true;
-//   try {
-//     // await scanJunkFiles((fileInfo) => {
-//     //   mainWindow && mainWindow.webContents.send('scan-item', fileInfo);
-//     // });
-//     await scanJunkFiles(
-//       (fileInfo) => {
-//         mainWindow && mainWindow.webContents.send('scan-item', fileInfo);
-//       },
-//       (progress, current, total, currentPath) => {
-//         mainWindow && mainWindow.webContents.send('scan-progress', progress, current, total, currentPath);
-//       }
-//     );
-//     mainWindow && mainWindow.webContents.send('scan-complete');
-//   } catch (err) {
-//     mainWindow && mainWindow.webContents.send('scan-error', err && (err.message || err.code));
-//   } finally {
-//     scanning = false;
-//   }
-// });
+let userSettings = {};
 
 ipcMain.on('scan-junk', async (event) => {
   if (scanning) {
@@ -125,14 +100,19 @@ ipcMain.on('scan-junk', async (event) => {
   
   try {
     await scanJunkFiles(
-      (fileInfo) => {
-        mainWindow && mainWindow.webContents.send('scan-item', fileInfo);
+      (file, totalFiles, scannedFiles) => {
+        mainWindow && mainWindow.webContents.send('scan-item', file, totalFiles, scannedFiles);
       },
-      (progress, current, total, currentPath) => {
-        mainWindow && mainWindow.webContents.send('scan-progress', progress, current, total, currentPath);
-      }
+      (progress, current, total, currentPath, totalFiles, scannedFiles) => {
+        mainWindow && mainWindow.webContents.send('scan-progress', progress, current, total, currentPath, totalFiles, scannedFiles);
+      },
+      userSettings
     );
-    mainWindow && mainWindow.webContents.send('scan-complete');
+    // mainWindow && mainWindow.webContents.send('scan-complete');
+    // 确保进度100%后再发送完成事件
+    setTimeout(() => {
+      mainWindow && mainWindow.webContents.send('scan-complete');
+    }, 200);
   } catch (err) {
     mainWindow && mainWindow.webContents.send('scan-error', err && (err.message || err.code));
   } finally {

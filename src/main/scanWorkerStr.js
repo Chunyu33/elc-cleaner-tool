@@ -1,4 +1,3 @@
-// worker代码
 module.exports = `
 const { parentPort } = require('worker_threads');
 const os = require('os');
@@ -6,10 +5,26 @@ const path = require('path');
 const fs = require('fs');
 const fsp = fs.promises;
 
-// 配置参数
-const MAX_SCAN_DEPTH = 6; // 最大扫描深度
-const MIN_FILE_SIZE = 1024; // 最小文件大小 (1KB)
-const JUNK_EXTENSIONS = ['.tmp', '.log', '.cache', '.bak', '.old', '.temp', '.dmp', '.chk'];
+// 默认配置参数
+const DEFAULT_SETTINGS = {
+  maxDepth: 6,
+  minSize: 1024,
+  extensions: ['.tmp', '.log', '.cache', '.bak', '.old', '.temp', '.dmp', '.chk']
+};
+
+// 当前扫描设置
+let scanSettings = { ...DEFAULT_SETTINGS };
+
+// 接收设置
+parentPort.on('message', (message) => {
+  if (message.type === 'settings') {
+    // 合并传入的设置
+    scanSettings = {
+      ...DEFAULT_SETTINGS,
+      ...message.settings
+    };
+  }
+});
 
 // 格式化文件大小
 function formatSize(bytes) {
@@ -27,12 +42,9 @@ function getFileExtension(filePath) {
 
 // 判断是否是垃圾文件
 function isJunkFile(filePath, fileSize) {
-  // 检查文件大小
-  if (fileSize < MIN_FILE_SIZE) return false;
-  
-  // 检查文件扩展名
+  if (fileSize < scanSettings.minSize) return false;
   const ext = getFileExtension(filePath);
-  return JUNK_EXTENSIONS.includes(ext);
+  return scanSettings.extensions.includes(ext);
 }
 
 // 获取垃圾文件路径列表
@@ -98,10 +110,7 @@ function getJunkPaths() {
 
 // 扫描文件夹（带深度限制）
 async function scanFolder(folderPath, depth = 0) {
-  // 检查深度限制
-  if (depth > MAX_SCAN_DEPTH) {
-    return [];
-  }
+  if (depth > scanSettings.maxDepth) return [];
   
   let entries;
   try {
@@ -120,11 +129,9 @@ async function scanFolder(folderPath, depth = 0) {
     if (lst.isSymbolicLink()) continue;
     
     if (lst.isDirectory()) {
-      // 递归扫描子目录，增加深度
       const subResults = await scanFolder(full, depth + 1);
       results.push(...subResults);
     } else if (lst.isFile()) {
-      // 检查是否是垃圾文件
       if (isJunkFile(full, lst.size)) {
         results.push({ 
           path: full, 
@@ -142,28 +149,76 @@ async function scanFolder(folderPath, depth = 0) {
 (async () => {
   try {
     const junkPaths = getJunkPaths();
+    const totalPaths = junkPaths.length;
+    let scannedPaths = 0;
+    let totalFiles = 0; // 总文件数
+    let scannedFiles = 0; // 已扫描文件数
     
     // 发送路径总数
-    parentPort.postMessage({ type: 'totalPaths', count: junkPaths.length });
+    parentPort.postMessage({ type: 'totalPaths', count: totalPaths });
     
     for (const p of junkPaths) {
       try {
         if (fs.existsSync(p)) {
-          // 发送进度更新
-          parentPort.postMessage({ type: 'progress', path: p });
+          // 发送当前扫描路径
+          parentPort.postMessage({ type: 'scanningPath', path: p });
           
           // 扫描文件夹
           const files = await scanFolder(p);
           
+          // 更新文件计数
+          const fileCount = files.length;
+          totalFiles += fileCount;
+          
           // 发送文件
           for (const file of files) {
-            parentPort.postMessage({ type: 'file', file });
+            scannedFiles++;
+            parentPort.postMessage({ 
+              type: 'file', 
+              file,
+              totalFiles,
+              scannedFiles
+            });
           }
+          
+          // 更新进度
+          scannedPaths++;
+          const progress = Math.floor((scannedPaths / totalPaths) * 100);
+          parentPort.postMessage({ 
+            type: 'progress', 
+            progress,
+            current: scannedPaths,
+            total: totalPaths,
+            path: p,
+            totalFiles,
+            scannedFiles
+          });
         }
       } catch (error) {
         console.error(\`扫描路径 \${p} 时出错:\`, error);
+        scannedPaths++;
+        parentPort.postMessage({ 
+          type: 'progress', 
+          progress: Math.floor((scannedPaths / totalPaths) * 100),
+          current: scannedPaths,
+          total: totalPaths,
+          path: p,
+          totalFiles,
+          scannedFiles
+        });
       }
     }
+    
+    // 确保进度达到100%
+    parentPort.postMessage({ 
+      type: 'progress', 
+      progress: 100,
+      current: totalPaths,
+      total: totalPaths,
+      path: '完成扫描',
+      totalFiles,
+      scannedFiles
+    });
     
     parentPort.postMessage({ type: 'complete' });
   } catch (error) {

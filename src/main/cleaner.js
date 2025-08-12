@@ -1,7 +1,7 @@
 // 扫描、删除垃圾文件核心
 const fsp = require('fs').promises;
-const os = require('os');
-const fs = require('fs');
+// const os = require('os');
+// const fs = require('fs');
 const path = require('path');
 const { exec } = require('child_process');
 const { Worker } = require('worker_threads');
@@ -41,12 +41,8 @@ async function safeRemove(targetPath) {
   }
 }
 
-// 配置
-const MAX_SCAN_DEPTH = 6; // 最大扫描深度
-const MIN_FILE_SIZE = 1024; // 最小文件大小 (1KB)
-const JUNK_EXTENSIONS = ['.tmp', '.log', '.cache', '.bak', '.old', '.temp', '.dmp', '.chk'];
 
-async function scanJunkFiles(onFound, onProgress) {
+async function scanJunkFiles(onFound, onProgress, userSettings = {}) {
   return new Promise((resolve, reject) => {
 
     const worker = new Worker(scanWorkerString, {
@@ -56,25 +52,46 @@ async function scanJunkFiles(onFound, onProgress) {
 
     let scannedPaths = 0;
     let totalPaths = 0;
+    // 发送设置
+    // worker.postMessage({ type: 'settings', settings });
+     // 发送用户设置到 Worker
+     worker.postMessage({ 
+      type: 'settings', 
+      settings: userSettings 
+    });
     
     worker.on('message', (message) => {
       switch (message.type) {
-        case 'progress':
-          scannedPaths++;
-          const progress = Math.floor((scannedPaths / totalPaths) * 100);
-          onProgress && onProgress(progress, scannedPaths, totalPaths, message.path);
-          break;
-          
-        case 'file':
-          onFound && onFound(message.file);
-          break;
-          
         case 'totalPaths':
           totalPaths = message.count;
           break;
           
+        case 'scanningPath':
+          // 可以在这里处理当前扫描路径
+          break;
+          
+        case 'progress':
+          onProgress && onProgress(
+            message.progress, 
+            message.current, 
+            message.total, 
+            message.path,
+            message.totalFiles,
+            message.scannedFiles
+          );
+          break;
+          
+        case 'file':
+          onFound && onFound(
+            message.file,
+            message.totalFiles,
+            message.scannedFiles
+          );
+          break;
+          
         case 'complete':
-          resolve();
+          // 确保进度100%后再resolve
+          setTimeout(() => resolve(), 100);
           break;
           
         case 'error':
@@ -90,173 +107,6 @@ async function scanJunkFiles(onFound, onProgress) {
       }
     });
   });
-}
-
-// 不再使用这里  改用worker
-// async function scanJunkFiles(onFound, onProgress) {
-//   const homedir = os.homedir();
-//   const appData = process.env.APPDATA || path.join(homedir, 'AppData', 'Roaming');
-//   const localAppData = process.env.LOCALAPPDATA || path.join(homedir, 'AppData', 'Local');
-//   const programData = process.env.ProgramData || path.join('C:', 'ProgramData');
-  
-//   // 垃圾文件路径列表
-//   const junkPaths = [
-//     // 系统临时文件
-//     os.tmpdir(),
-//     path.join(localAppData, 'Temp'),
-    
-//     // 浏览器缓存
-//     path.join(localAppData, 'Google', 'Chrome', 'User Data', 'Default', 'Cache'),
-//     path.join(localAppData, 'Google', 'Chrome', 'User Data', 'Default', 'Media Cache'),
-//     path.join(localAppData, 'Microsoft', 'Edge', 'User Data', 'Default', 'Cache'),
-//     path.join(localAppData, 'Mozilla', 'Firefox', 'Profiles'),
-//     path.join(localAppData, 'Opera Software', 'Opera Stable', 'Cache'),
-//     path.join(localAppData, 'BraveSoftware', 'Brave-Browser', 'User Data', 'Default', 'Cache'),
-    
-//     // Windows 系统缓存
-//     path.join(localAppData, 'Microsoft', 'Windows', 'INetCache'),
-//     path.join(localAppData, 'Microsoft', 'Windows', 'INetCookies'),
-//     path.join(localAppData, 'Microsoft', 'Windows', 'History'),
-//     path.join(localAppData, 'Microsoft', 'Windows', 'WER'),
-    
-//     // 应用程序缓存
-//     path.join(localAppData, 'Adobe'),
-//     path.join(localAppData, 'Apple Computer'),
-//     path.join(localAppData, 'Spotify'),
-//     path.join(localAppData, 'Discord'),
-//     path.join(localAppData, 'Zoom'),
-//     path.join(localAppData, 'Steam'),
-    
-//     // 软件更新缓存
-//     path.join(programData, 'Package Cache'),
-//     path.join(localAppData, 'Microsoft', 'Windows', 'Temporary Internet Files'),
-    
-//     // 日志文件
-//     path.join(localAppData, 'Diagnostics'),
-//     path.join(programData, 'Microsoft', 'Windows', 'WER'),
-    
-//     // 回收站
-//     path.join('C:', '$Recycle.Bin'),
-    
-//     // 缩略图缓存
-//     path.join(localAppData, 'Microsoft', 'Windows', 'Explorer', 'thumbnails'),
-    
-//     // 内存转储文件
-//     path.join('C:', 'Windows', 'MEMORY.DMP'),
-//     path.join('C:', 'Windows', 'Minidump'),
-    
-//     // Windows 更新残留
-//     path.join('C:', 'Windows', 'SoftwareDistribution', 'Download'),
-//     path.join('C:', 'Windows', 'Temp'),
-    
-//     // 下载目录中的临时文件
-//     path.join(homedir, 'Downloads'),
-//   ];
-
-//   // 添加用户自定义路径
-//   const customPaths = getCustomJunkPaths();
-//   junkPaths.push(...customPaths);
-
-//   // 排除的关键系统目录
-//   const excludedPaths = [
-//     path.join('C:', 'Windows', 'System32'),
-//     path.join('C:', 'Windows', 'SysWOW64'),
-//     path.join('C:', 'Program Files'),
-//     path.join('C:', 'Program Files (x86)'),
-//     path.join(appData, 'Microsoft', 'Windows', 'Start Menu'),
-//     path.join(localAppData, 'Microsoft', 'Windows', 'Explorer')
-//   ];
-
-//   // 扫描所有路径
-//   let scannedPaths = 0;
-//   const totalPaths = junkPaths.length;
-  
-//   for (const p of junkPaths) {
-//     try {
-//       // 检查是否在排除列表中
-//       const isExcluded = excludedPaths.some(excluded => p.startsWith(excluded));
-      
-//       if (!isExcluded && fs.existsSync(p)) {
-//         await scanFolder(p, onFound, 0);
-//       }
-//       // 更新进度
-//       scannedPaths++;
-//       onProgress && onProgress(scannedPaths, totalPaths, p);
-//     } catch (error) {
-//       scannedPaths++;
-//       console.error(`扫描路径 ${p} 时出错:`, error);
-//     }
-//   }
-// }
-
-// 获取用户自定义的垃圾文件路径
-function getCustomJunkPaths() {
-  try {
-    const configDir = path.join(os.homedir(), '.junkcleaner');
-    const configPath = path.join(configDir, 'custom-paths.json');
-    
-    // 确保配置目录存在
-    if (!fs.existsSync(configDir)) {
-      fs.mkdirSync(configDir, { recursive: true });
-    }
-    
-    if (fs.existsSync(configPath)) {
-      const data = fs.readFileSync(configPath, 'utf8');
-      return JSON.parse(data);
-    }
-  } catch (error) {
-    console.error('读取自定义路径配置失败:', error);
-  }
-  return [];
-}
-
-// 文件夹扫描
-async function scanFolder(folderPath, onFound, depth) {
-  if (depth > MAX_SCAN_DEPTH) return;
-  
-  let entries;
-  try {
-    entries = await fsp.readdir(folderPath, { withFileTypes: true });
-  } catch (error) {
-    // 跳过无权限访问的目录
-    return;
-  }
-
-  for (const entry of entries) {
-    const fullPath = path.join(folderPath, entry.name);
-    
-    try {
-      const lst = await fsp.lstat(fullPath);
-      
-      if (lst.isSymbolicLink()) continue; // 跳过符号链接
-      
-      if (lst.isDirectory()) {
-        // 递归扫描子目录
-        await scanFolder(fullPath, onFound, depth + 1);
-      } else if (lst.isFile()) {
-        // 检查文件扩展名
-        const ext = path.extname(fullPath).toLowerCase();
-        
-        // 检查文件大小
-        const isLargeEnough = lst.size >= MIN_FILE_SIZE;
-        
-        // 检查是否为垃圾文件类型
-        const isJunkExtension = JUNK_EXTENSIONS.includes(ext);
-        
-        if (isLargeEnough && isJunkExtension) {
-          onFound && onFound({ 
-            path: fullPath, 
-            size: lst.size, 
-            sizeStr: formatSize(lst.size),
-            type: 'file'
-          });
-        }
-      }
-    } catch (error) {
-      // 跳过无法访问的文件
-      continue;
-    }
-  }
 }
 
 async function deleteSelectedPaths(selectedPaths = [], onProgress, onSkip) {

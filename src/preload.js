@@ -8,7 +8,7 @@ contextBridge.exposeInMainWorld('api', {
 
   // 扫描项（逐条）
   onScanItem: (cb) => {
-    const listener = (event, data) => cb && cb(data);
+    const listener = (event, file, totalFiles, scannedFiles) => cb && cb(file, totalFiles, scannedFiles);
     ipcRenderer.on('scan-item', listener);
     return () => ipcRenderer.removeListener('scan-item', listener);
   },
@@ -19,7 +19,8 @@ contextBridge.exposeInMainWorld('api', {
   },
   // 扫描进度
   onScanProgress: (cb) => {
-    const listener = (event, progress, current, total, currentPath) => cb && cb(progress, current, total, currentPath);
+    const listener = (event, progress, current, total, currentPath, totalFiles, scannedFiles) => 
+      cb && cb(progress, current, total, currentPath, totalFiles, scannedFiles);
     ipcRenderer.on('scan-progress', listener);
     return () => ipcRenderer.removeListener('scan-progress', listener);
   },
