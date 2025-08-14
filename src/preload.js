@@ -37,7 +37,8 @@ contextBridge.exposeInMainWorld('api', {
 
   // 删除进度/跳过
   onDeleteProgress: (cb) => {
-    const listener = (event, count, currentPath) => cb && cb(count, currentPath);
+    const listener = (event, percent, processed, total, currentPath) => 
+      cb && cb(percent, processed, total, currentPath);
     ipcRenderer.on('delete-progress', listener);
     return () => ipcRenderer.removeListener('delete-progress', listener);
   },

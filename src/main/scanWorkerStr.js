@@ -9,7 +9,7 @@ const fsp = fs.promises;
 const DEFAULT_SETTINGS = {
   maxDepth: 6,
   minSize: 1024,
-  extensions: ['.tmp', '.log', '.cache', '.bak', '.old', '.temp', '.dmp', '.chk']
+  extensions: ['.tmp', '.log', '.cache', '.bak', '.old', '.temp', '.dmp', '.chk', '.txt']
 };
 
 // 当前扫描设置
@@ -44,6 +44,7 @@ function getFileExtension(filePath) {
 function isJunkFile(filePath, fileSize) {
   if (fileSize < scanSettings.minSize) return false;
   const ext = getFileExtension(filePath);
+  console.log('ext:', ext)
   return scanSettings.extensions.includes(ext);
 }
 

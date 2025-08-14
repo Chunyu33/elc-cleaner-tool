@@ -58,7 +58,14 @@ export default function Main() {
 
   // delete / progress state
   const [initialDeleteTotal, setInitialDeleteTotal] = useState(0);
-  const [deleteProcessed, setDeleteProcessed] = useState(0);
+  // 添加删除进度状态
+  const [deleteProgress, setDeleteProgress] = useState({
+    percent: 0,
+    processed: 0,
+    total: 0,
+    currentPath: '',
+    visible: false
+  });
   const [progressPct, setProgressPct] = useState(0);
   const [deleting, setDeleting] = useState(false);
 
@@ -123,7 +130,7 @@ export default function Main() {
 
   // 订阅：扫描（onScanItem/onScanComplete）
   useEffect(() => {
-    const unsubItem = window.api.onScanItem((item) => {
+    const unsubItem = window.api.onScanItem((item, totalFiles, scannedFiles) => {
       if (!item || !item.path) return;
       // 累加总大小
       setTotalSizeFoundBytes(prev => prev + item.size);
@@ -161,6 +168,12 @@ export default function Main() {
       } else {
         ensureFlushTimer();
       }
+      // 更新文件计数
+      setScanProgress(prev => ({
+        ...prev,
+        totalFiles,
+        scannedFiles
+      }));
     });
 
     const unsubComplete = window.api.onScanComplete(() => {
@@ -188,10 +201,15 @@ export default function Main() {
 
   // 订阅：删除进度/跳过/完成
   useEffect(() => {
-    const unsubProgress = window.api.onDeleteProgress((count, currentPath) => {
-      // count 是从 main 中累积的；使用它来计算与 initialDeleteTotal 相关的百分比
-      setDeleteProcessed(count);
-      setProgressPct(initialDeleteTotal > 0 ? Math.min(100, Math.floor((count / initialDeleteTotal) * 100)) : 100);
+    const unsubProgress = window.api.onDeleteProgress((percent, processed, total, currentPath) => {
+      setDeleteProgress({
+        percent,
+        processed,
+        total,
+        currentPath,
+        visible: true
+      });
+      setProgressPct(initialDeleteTotal > 0 ? Math.min(100, Math.floor((percent / initialDeleteTotal) * 100)) : 100);
       // 如果存在，则删除已删除的项目
       setItems(prev => {
         const idx = prev.findIndex(it => it.path === currentPath);
@@ -223,13 +241,23 @@ export default function Main() {
     });
 
     const unsubComplete = window.api.onDeleteComplete((count) => {
+      setDeleteProgress(prev => ({
+        ...prev,
+        percent: 100,
+        currentPath: '删除完成'
+      }));
+       // 3秒后隐藏进度条
+      setTimeout(() => {
+        setDeleteProgress(prev => ({
+          ...prev,
+          visible: false
+        }));
+      }, 3000);
       setDeletedCount(count);
       // 显示简洁的消息提示
       if (skippedCountRef.current > 0) {
         message.warning(`已删除 ${count} 个文件，${skippedCountRef.current} 个文件被跳过（系统占用/无权限）`);
-        // console.warn(`已删除 ${count} 个文件（${formatSize(deletedSizeRef.current)}），${skippedCountRef.current} 个文件被跳过`)
       } else {
-        // console.warn(`已成功删除 ${count} 个文件，释放空间 ${formatSize(deletedSizeRef.current)}`)
         message.success(`已成功删除 ${count} 个文件`);
       }
       setDeleting(false);
@@ -313,21 +341,6 @@ export default function Main() {
     };
   }, []);
   
-  // 订阅文件发现事件
-  useEffect(() => {
-    const unsubItem = window.api.onScanItem((file, totalFiles, scannedFiles) => {
-      // 更新文件计数
-      setScanProgress(prev => ({
-        ...prev,
-        totalFiles,
-        scannedFiles
-      }));
-    });
-    
-    return () => {
-      unsubItem && unsubItem();
-    };
-  }, []);
   
   // 扫描完成时确保显示100%
   useEffect(() => {
@@ -423,7 +436,13 @@ export default function Main() {
     setTotalFound(0);
     setProgressPct(0);
     setInitialDeleteTotal(0);
-    setDeleteProcessed(0);
+    setDeleteProgress({
+      percent: 0,
+      processed: 0,
+      total: 0,
+      currentPath: '',
+      visible: false
+    });
     // 开始扫描
     window.api.scanJunk();
   };
@@ -466,7 +485,7 @@ export default function Main() {
   const startDelete = () => {
     const toDelete = items.filter(it => it.selected).map(it => it.path);
     if (toDelete.length === 0) {
-      alert('未选择任何要删除的项。');
+      message.warning('未选择任何要删除的项');
       return;
     }
     // 清空UI中的跳过列表
@@ -474,7 +493,13 @@ export default function Main() {
     // 重置数据
     skippedCountRef.current = 0;
     setInitialDeleteTotal(toDelete.length);
-    setDeleteProcessed(0);
+    setDeleteProgress({
+      percent: 0,
+      processed: 0,
+      total: toDelete.length,
+      currentPath: '',
+      visible: true
+    });
     setProgressPct(0);
     setDeleting(true);
     window.api.deleteJunk(toDelete);
@@ -615,7 +640,7 @@ export default function Main() {
         </div>
       </div>
 
-      {!scanProgress.visible && (
+      {(!scanProgress.visible && !deleteProgress.visible) && (
         <div className='total-found'>
           已发现: <strong>{totalFound}</strong> 项，总大小 <strong>{formatSize(totalSizeFoundBytes)}</strong>；
           已选:  <strong>{selectedPaths.size}</strong> 项，总大小  <strong>{formatSize(totalSizeSelectedBytes)}</strong>
@@ -628,8 +653,7 @@ export default function Main() {
             percent={scanProgress.percent}
             status="active"
             strokeColor={{
-              '0%': '#ffccc7',
-              '50%': '#ffe58f',
+              '0%': '#ffe58f',
               '100%': '#87d068',
             }}
           />
@@ -660,6 +684,38 @@ export default function Main() {
         </div>
       )}
 
+      {deleteProgress.visible && (
+        <div className="delete-progress">
+          <Progress 
+            percent={deleteProgress.percent}
+            status={deleteProgress.percent === 100 ? 'success' : 'active'}
+            strokeColor={{
+              '0%': '#ffe58f',
+              '100%': '#87d068',
+            }}
+          />
+          
+          <div className="progress-stats">
+            <div className="stat-item">
+              <span className="stat-label">进度:</span>
+              <span className="stat-value">{deleteProgress.percent}%</span>
+            </div>
+            
+            <div className="stat-item">
+              <span className="stat-label">文件:</span>
+              <span className="stat-value">{deleteProgress.processed}/{deleteProgress.total}</span>
+            </div>
+          </div>
+          
+          {deleteProgress.currentPath && (
+            <div className="current-path">
+              <span className="path-label">当前处理:</span>
+              <span className="path-value">{deleteProgress.currentPath}</span>
+            </div>
+          )}
+        </div>
+      )}
+
       <div className='list-container'>
         <div>
           <List
@@ -684,7 +740,6 @@ export default function Main() {
           ))}
         </div>
       </div> */}
-
     </div>
   );
 }
