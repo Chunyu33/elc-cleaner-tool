@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { FixedSizeList as List } from 'react-window';
-import { Button, Space, message, Select, Checkbox, Progress } from 'antd';
+import { Button, Space, message, Select, Checkbox, Progress, Empty, Spin } from 'antd';
 import './Main.css';
 
 // 可调参数
@@ -41,6 +41,8 @@ export default function Main() {
   const [totalSizeFoundBytes, setTotalSizeFoundBytes] = useState(0); // 总大小（字节）
   const [totalSizeSelectedBytes, setTotalSizeSelectedBytes] = useState(0); // 已选大小（字节）
   const [deletedCount, setDeletedCount] = useState(0);
+
+  const [scanning, setScanning] = useState(false);
 
   // 一键打开磁盘清理工具state
   const [cleanmgrAvailable, setCleanmgrAvailable] = useState(false);
@@ -177,6 +179,24 @@ export default function Main() {
     });
 
     const unsubComplete = window.api.onScanComplete(() => {
+      // 确保进度100%
+      setScanProgress({
+        percent: 100,
+        currentPaths: progressRef.current.totalPaths,
+        totalPaths: progressRef.current.totalPaths,
+        currentPath: '扫描完成',
+        totalFiles: progressRef.current.totalFiles,
+        scannedFiles: progressRef.current.scannedFiles,
+        visible: true
+      });
+      setScanning(false);
+      // 3秒后隐藏进度条
+      setTimeout(() => {
+        setScanProgress(prev => ({
+          ...prev,
+          visible: false
+        }));
+      }, 3000);
       flushBuffer();
       stopFlushTimer();
     });
@@ -343,35 +363,6 @@ export default function Main() {
     };
   }, []);
   
-  
-  // 扫描完成时确保显示100%
-  useEffect(() => {
-    const unsubComplete = window.api.onScanComplete(() => {
-      // 确保进度100%
-      setScanProgress({
-        percent: 100,
-        currentPaths: progressRef.current.totalPaths,
-        totalPaths: progressRef.current.totalPaths,
-        currentPath: '扫描完成',
-        totalFiles: progressRef.current.totalFiles,
-        scannedFiles: progressRef.current.scannedFiles,
-        visible: true
-      });
-      
-      // 3秒后隐藏进度条
-      setTimeout(() => {
-        setScanProgress(prev => ({
-          ...prev,
-          visible: false
-        }));
-      }, 3000);
-    });
-    
-    return () => {
-      unsubComplete && unsubComplete();
-    };
-  }, []);
-  
 
   // 过滤器和分组：生成带有组标题的扁平列表
   const filteredFlat = useMemo(() => {
@@ -447,6 +438,7 @@ export default function Main() {
     });
     // 开始扫描
     window.api.scanJunk();
+    setScanning(true);
   };
 
   const toggleSelectAll = () => {
@@ -584,16 +576,16 @@ export default function Main() {
 
       <div className='operator'>
         <Space>
-          <Button type="primary" onClick={startScan}>扫描垃圾</Button>
+          <Button disabled={scanning || deleting} type="primary" onClick={startScan}>扫描垃圾</Button>
           <Button 
             type="primary" 
-            danger 
+            warning 
             onClick={startDelete} 
-            disabled={deleting || selectedPaths.size === 0}
+            disabled={deleting || selectedPaths.size === 0 || scanning}
           >
             清理已选 ({selectedPaths.size})
           </Button>
-          <Button onClick={toggleSelectAll}>全选 / 取消全选</Button>
+          <Button disabled={scanning || deleting} onClick={toggleSelectAll}>全选 / 取消全选</Button>
           {/* <Button onClick={openSkipLog}>打开跳过日志</Button> */}
           <Button onClick={runCleanmgr}>一键磁盘清理</Button>
         </Space>
@@ -719,16 +711,23 @@ export default function Main() {
       )}
 
       <div className='list-container'>
-        <div>
-          <List
-            height={listHeight}
-            itemCount={itemCount}
-            itemSize={itemSize}
-            width="100%"
-            style={{ overflowX: 'hidden' }}
-          >
-            {Row}
-          </List>
+        <div className='relative'>
+          {scanning && <div className='loading'><Spin tip='正在扫描'/></div>}
+          {items && items.length > 1 ? (
+            <List
+              height={listHeight}
+              itemCount={itemCount}
+              itemSize={itemSize}
+              width="100%"
+              style={{ overflowX: 'hidden' }}
+            >
+              {Row}
+            </List>
+          ) : (
+            <div style={{ height: listHeight }} className='center'>
+              <Empty description="暂无内容" />
+            </div>
+          )}
         </div>
       </div>
 

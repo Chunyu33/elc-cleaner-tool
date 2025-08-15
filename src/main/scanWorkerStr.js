@@ -1,4 +1,3 @@
-// scanWorkerString.js
 module.exports = String.raw`
 const { parentPort } = require('worker_threads');
 const os = require('os');

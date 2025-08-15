@@ -1,12 +1,11 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
-// 将bridge挂载到window上
 contextBridge.exposeInMainWorld('api', {
   // 控制
   scanJunk: () => ipcRenderer.send('scan-junk'),
   deleteJunk: (files) => ipcRenderer.send('delete-junk', files),
 
-  // 扫描项（逐条）
+  // 扫描
   onScanItem: (cb) => {
     const listener = (event, file, totalFiles, scannedFiles) => cb && cb(file, totalFiles, scannedFiles);
     ipcRenderer.on('scan-item', listener);

@@ -42,24 +42,12 @@ let tray;
 
 Menu.setApplicationMenu(null); // 移除菜单
 
-// 获取图标路径（开发和打包都能用）
-// function getIconPath() {
-//   if (app.isPackaged) {
-//     // 打包后图标放在 resources/assets 下
-//     return path.join(process.resourcesPath, 'assets', 'favicon.ico');
-//   } else {
-//     // 开发环境
-//     return path.join(__dirname, 'assets', 'favicon.ico');
-//   }
-// }
-
 // 获取图标路径
 const getIconPath = () => {
   // 开发环境和打包环境路径一致，Webpack 会拷贝 assets
   return path.join(__dirname, 'assets', 'favicon.ico');
 };
 
-console.log(getIconPath(), '=============iconPath')
 const createWindow = () => {
   mainWindow = new BrowserWindow({
     width: 1000,
@@ -86,6 +74,23 @@ const createWindow = () => {
 // 创建托盘
 const createTray = () => {
   tray = new Tray(getIconPath());
+  // 创建右键菜单
+  const contextMenu = Menu.buildFromTemplate([
+    { 
+      label: '显示主窗口', 
+      click: () => { mainWindow.show(); } 
+    },
+    { type: 'separator' },
+    {
+      label: '退出',
+      click: () => {
+        app.quit(); // 点击后退出应用
+      },
+    },
+  ]);
+  // 绑定菜单
+  tray.setContextMenu(contextMenu);
+  // 设置标题
   tray.setToolTip('ELC Cleaner Tool');
   tray.on('click', () => {
     mainWindow.show();
