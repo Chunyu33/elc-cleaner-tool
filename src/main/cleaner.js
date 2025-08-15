@@ -15,6 +15,8 @@ async function scanJunkFiles(onFound, onProgress, userSettings = {}) {
       workerData: {}, // 如果需要可以传参数
     });
 
+    // const worker = new Worker(path.join(__dirname, 'workers', 'scanWorker.js'));
+
     let scannedPaths = 0;
     let totalPaths = 0;
     // 发送设置

@@ -1,4 +1,5 @@
 const { ipcMain, shell } = require('electron');
+const { exec } = require("child_process");
 const { scanJunkFiles, deleteSelectedPaths, cleanmgrExec } = require('./main/cleaner');
 const fs = require('fs');
 const path = require('path');

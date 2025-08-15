@@ -183,6 +183,7 @@ export default function Main() {
 
     const unsubError = window.api.onScanError((err) => {
       stopFlushTimer();
+      console.log('扫描出错: ' + err)
       alert('扫描出错: ' + (err || 'unknown'));
     });
 
@@ -314,6 +315,7 @@ export default function Main() {
   // 订阅扫描进度事件
   useEffect(() => {
     const unsubProgress = window.api.onScanProgress((progress, current, total, currentPath, totalFiles, scannedFiles) => {
+      // console.log(progress, '========progress')
       // 更新 ref
       progressRef.current = {
         percent: progress,
