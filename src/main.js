@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu } = require('electron');
+const { app, BrowserWindow, Menu, Tray } = require('electron');
 const path = require('path');
 
 const initEventHandlers = require('./eventHandlers');
@@ -6,6 +6,7 @@ const initEventHandlers = require('./eventHandlers');
 if (require('electron-squirrel-startup')) app.quit();
 
 let mainWindow;
+let tray;
 
 // const template = [
 //   {
@@ -41,17 +42,35 @@ let mainWindow;
 
 Menu.setApplicationMenu(null); // 移除菜单
 
+// 获取图标路径（开发和打包都能用）
+// function getIconPath() {
+//   if (app.isPackaged) {
+//     // 打包后图标放在 resources/assets 下
+//     return path.join(process.resourcesPath, 'assets', 'favicon.ico');
+//   } else {
+//     // 开发环境
+//     return path.join(__dirname, 'assets', 'favicon.ico');
+//   }
+// }
+
+// 获取图标路径
+const getIconPath = () => {
+  // 开发环境和打包环境路径一致，Webpack 会拷贝 assets
+  return path.join(__dirname, 'assets', 'favicon.ico');
+};
+
+console.log(getIconPath(), '=============iconPath')
 const createWindow = () => {
   mainWindow = new BrowserWindow({
     width: 1000,
     height: 680,
     frame: false, // 关闭系统标题栏
+    icon: getIconPath(),
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : undefined,
     webPreferences: {
       // nodeIntegration: true,
       // contextIsolation: false,
       preload: MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY, // electron-forge webpack 注入
-      icon: path.join(__dirname, 'assets/icon', 'favicon.ico')
     },
   });
 
@@ -64,7 +83,19 @@ const createWindow = () => {
   initEventHandlers(app, mainWindow);
 };
 
-app.whenReady().then(createWindow);
+// 创建托盘
+const createTray = () => {
+  tray = new Tray(getIconPath());
+  tray.setToolTip('ELC Cleaner Tool');
+  tray.on('click', () => {
+    mainWindow.show();
+  });
+};
+
+app.whenReady().then(() => {
+  createWindow();
+  createTray();
+});
 
 // 事件监听
 app.on('activate', () => {
