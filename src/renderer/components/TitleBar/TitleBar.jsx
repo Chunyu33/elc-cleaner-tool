@@ -48,7 +48,7 @@ export default function TitleBar() {
       </div>
 
       {/* 中间标题 */}
-      <div className="title-bar-center">CyCleaner</div>
+      <div className="title-bar-center">WipeX</div>
 
       {/* 右侧窗口按钮 */}
       <div className="title-bar-right">

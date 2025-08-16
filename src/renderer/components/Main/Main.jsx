@@ -712,7 +712,7 @@ export default function Main() {
 
       <div className='list-container'>
         <div className='relative'>
-          {scanning && <div className='loading'><Spin tip='正在扫描'/></div>}
+          {scanning && <div className='loading'><Spin size='large' tip='正在扫描'/></div>}
           {items && items.length > 1 ? (
             <List
               height={listHeight}

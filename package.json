@@ -1,8 +1,8 @@
 {
-  "name": "elc-cleaner-tool",
-  "productName": "CyCleaner",
+  "name": "wipe-x",
+  "productName": "WipeX",
   "version": "1.0.0",
-  "description": "一款简易的windows垃圾清理工具",
+  "description": "WipeX,一款简易的windows垃圾清理工具",
   "main": ".webpack/main",
   "scripts": {
     "start": "electron-forge start",

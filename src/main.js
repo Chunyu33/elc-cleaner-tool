@@ -91,7 +91,7 @@ const createTray = () => {
   // 绑定菜单
   tray.setContextMenu(contextMenu);
   // 设置标题
-  tray.setToolTip('ELC Cleaner Tool');
+  tray.setToolTip('WipeX');
   tray.on('click', () => {
     mainWindow.show();
   });
