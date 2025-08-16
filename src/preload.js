@@ -1,12 +1,11 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
-// 将bridge挂载到window上
 contextBridge.exposeInMainWorld('api', {
   // 控制
   scanJunk: () => ipcRenderer.send('scan-junk'),
   deleteJunk: (files) => ipcRenderer.send('delete-junk', files),
 
-  // 扫描项（逐条）
+  // 扫描
   onScanItem: (cb) => {
     const listener = (event, file, totalFiles, scannedFiles) => cb && cb(file, totalFiles, scannedFiles);
     ipcRenderer.on('scan-item', listener);
@@ -37,7 +36,8 @@ contextBridge.exposeInMainWorld('api', {
 
   // 删除进度/跳过
   onDeleteProgress: (cb) => {
-    const listener = (event, count, currentPath) => cb && cb(count, currentPath);
+    const listener = (event, percent, processed, total, currentPath) => 
+      cb && cb(percent, processed, total, currentPath);
     ipcRenderer.on('delete-progress', listener);
     return () => ipcRenderer.removeListener('delete-progress', listener);
   },

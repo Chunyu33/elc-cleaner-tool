@@ -1,6 +1,5 @@
 import React from 'react';
 import { Menu, Dropdown, Button, Space } from 'antd';
-import { DownOutlined } from '@ant-design/icons';
 import './TitleBar.css';
 
 // 菜单配置
@@ -14,7 +13,9 @@ const menuConfig = [
   {
     title: '帮助',
     items: [
-      { label: 'B站主页', action: () => window.api.openLink('https://space.bilibili.com/387797235') }
+      { label: '邮箱', action: () => window.api.openLink('mailto:1378813463@qq.com?subject=你好&body=反馈') },
+      { label: 'QQ', action: () => window.api.openLink('tencent://message/?uin=1378813463&Menu=yes') },
+      { label: 'B站主页', action: () => window.api.openLink('https://space.bilibili.com/387797235') },
     ]
   }
 ];
@@ -47,7 +48,7 @@ export default function TitleBar() {
       </div>
 
       {/* 中间标题 */}
-      <div className="title-bar-center">CyCleaner</div>
+      <div className="title-bar-center">WipeX</div>
 
       {/* 右侧窗口按钮 */}
       <div className="title-bar-right">

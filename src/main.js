@@ -1,30 +1,12 @@
-// main.js
-const { app, BrowserWindow, ipcMain, shell, Menu } = require('electron');
-const { exec } = require('child_process');
+const { app, BrowserWindow, Menu, Tray } = require('electron');
 const path = require('path');
-const fs = require('fs');
-const { scanJunkFiles, deleteSelectedPaths, cleanmgrExec } = require('./main/cleaner');
+
+const initEventHandlers = require('./eventHandlers');
 
 if (require('electron-squirrel-startup')) app.quit();
 
 let mainWindow;
-let scanning = false;
-let deleting = false;
-let deletedCountRef = { current: 0 };
-
-function getSkipLogPath() {
-  const dir = app.getPath('userData') || __dirname;
-  return path.join(dir, 'skipped.log');
-}
-function appendSkipLog(line) {
-  try {
-    const lp = getSkipLogPath();
-    fs.appendFileSync(lp, line + '\n', { encoding: 'utf8', flag: 'a' });
-  } catch (e) {
-    console.error('写入跳过日志失败', e);
-  }
-}
-
+let tray;
 
 // const template = [
 //   {
@@ -60,26 +42,65 @@ function appendSkipLog(line) {
 
 Menu.setApplicationMenu(null); // 移除菜单
 
+// 获取图标路径
+const getIconPath = () => {
+  // 开发环境和打包环境路径一致，Webpack 会拷贝 assets
+  return path.join(__dirname, 'assets', 'favicon.ico');
+};
+
 const createWindow = () => {
   mainWindow = new BrowserWindow({
     width: 1000,
     height: 680,
     frame: false, // 关闭系统标题栏
-    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : undefined, // Mac 优化
+    icon: getIconPath(),
+    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : undefined,
     webPreferences: {
       // nodeIntegration: true,
       // contextIsolation: false,
       preload: MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY, // electron-forge webpack 注入
-      icon: path.join(__dirname, 'assets/icon', 'favicon.ico')
     },
   });
 
   mainWindow.loadURL(MAIN_WINDOW_WEBPACK_ENTRY);
-  mainWindow.webContents.openDevTools(); // 开发阶段打开
-
+  // 开发阶段打开开发者工具
+  if (process.env.NODE_ENV === 'development') {
+    mainWindow.webContents.openDevTools();
+  }
+  // 初始化事件处理器
+  initEventHandlers(app, mainWindow);
 };
 
-app.whenReady().then(createWindow);
+// 创建托盘
+const createTray = () => {
+  tray = new Tray(getIconPath());
+  // 创建右键菜单
+  const contextMenu = Menu.buildFromTemplate([
+    { 
+      label: '显示主窗口', 
+      click: () => { mainWindow.show(); } 
+    },
+    { type: 'separator' },
+    {
+      label: '退出',
+      click: () => {
+        app.quit(); // 点击后退出应用
+      },
+    },
+  ]);
+  // 绑定菜单
+  tray.setContextMenu(contextMenu);
+  // 设置标题
+  tray.setToolTip('WipeX');
+  tray.on('click', () => {
+    mainWindow.show();
+  });
+};
+
+app.whenReady().then(() => {
+  createWindow();
+  createTray();
+});
 
 // 事件监听
 app.on('activate', () => {
@@ -89,128 +110,3 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
 
-let userSettings = {};
-
-ipcMain.on('scan-junk', async (event) => {
-  if (scanning) {
-    mainWindow && mainWindow.webContents.send('scan-busy');
-    return;
-  }
-  scanning = true;
-  
-  try {
-    await scanJunkFiles(
-      (file, totalFiles, scannedFiles) => {
-        mainWindow && mainWindow.webContents.send('scan-item', file, totalFiles, scannedFiles);
-      },
-      (progress, current, total, currentPath, totalFiles, scannedFiles) => {
-        mainWindow && mainWindow.webContents.send('scan-progress', progress, current, total, currentPath, totalFiles, scannedFiles);
-      },
-      userSettings
-    );
-    // mainWindow && mainWindow.webContents.send('scan-complete');
-    // 确保进度100%后再发送完成事件
-    setTimeout(() => {
-      mainWindow && mainWindow.webContents.send('scan-complete');
-    }, 200);
-  } catch (err) {
-    mainWindow && mainWindow.webContents.send('scan-error', err && (err.message || err.code));
-  } finally {
-    scanning = false;
-  }
-});
-
-// 删除：接收 files 数组
-ipcMain.on('delete-junk', async (event, files) => {
-  if (deleting) {
-    mainWindow && mainWindow.webContents.send('delete-busy');
-    return;
-  }
-  deleting = true;
-  try {
-    await deleteSelectedPaths(files || [],
-      (count, currentPath) => {
-        deletedCountRef.current += 1;
-        mainWindow && mainWindow.webContents.send('delete-progress', count, currentPath);
-      },
-      (skippedPath, reason) => {
-        // 不写入日志
-        // const line = `${new Date().toISOString()}\t${skippedPath}\t${reason}`;
-        // appendSkipLog(line);
-        mainWindow && mainWindow.webContents.send('delete-skip', skippedPath, reason);
-      }
-    );
-    mainWindow && mainWindow.webContents.send('delete-complete', deletedCountRef.current);
-  } catch (err) {
-    mainWindow && mainWindow.webContents.send('delete-error', err && (err.message || err.code));
-  } finally {
-    deleting = false;
-    deletedCountRef.current = 0;
-  }
-});
-
-// 读取跳过日志文本
-ipcMain.handle('read-skip-log', async () => {
-  try {
-    const p = getSkipLogPath();
-    const content = fs.readFileSync(p, 'utf8');
-    return content;
-  } catch (e) {
-    return '';
-  }
-});
-
-// 在文件管理器中打开日志目录
-ipcMain.handle('open-skip-log', async () => {
-  try {
-    const p = getSkipLogPath();
-    const dir = path.dirname(p);
-    await shell.openPath(dir);
-    return true;
-  } catch (e) {
-    return false;
-  }
-});
-
-// 打开磁盘清理
-ipcMain.handle('run-cleanmgr', async () => {
-  try {
-    await cleanmgrExec();
-    return { success: true };
-  } catch (error) {
-    return { success: false, error: error.message || '未知错误' };
-  }
-});
-
-// 添加可用性检查
-ipcMain.handle('check-cleanmgr-available', async () => {
-  return new Promise((resolve) => {
-    exec('where cleanmgr', (error) => {
-      resolve(!error);
-    });
-  });
-});
-
-
-// 窗口控制、以及其他事件
-ipcMain.on('window:minimize', () => {
-  mainWindow.minimize();
-});
-ipcMain.on('window:maximize', () => {
-  if (mainWindow.isMaximized()) {
-    mainWindow.unmaximize();
-  } else {
-    mainWindow.maximize();
-  }
-});
-ipcMain.on('window:close', () => {
-  mainWindow.close();
-});
-
-ipcMain.on('app-exit', () => {
-  app.quit();
-});
-
-ipcMain.on('open-link', (event, url) => {
-  shell.openExternal(url);
-});
